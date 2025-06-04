@@ -22,17 +22,18 @@ set.seed(2009)
 options(warn = -1)
 ```
 Randomized controlled trials (RCTs) are the gold standard for evaluating medical interventions, but they are often impractical, slow, or costly. Modern causal inference methods, coupled with real-world data (RWD), provide a faster, well-powered alternative for estimating treatment effects across diverse patient populations.Despite this potential, several barriers hinder their effective use in translational research. A key challenge is aligning "time zero," the point at which a patient cohort is defined, eligibility, and treatment assignment, which leads to intractable bias. Other barriers include biases induced from data preprocessing, confounding, or strong modeling assumptions. Target trial emulation (TTE) is a major innovation that addresses these barriers by emulating RCT protocols using RWD [@Hernan2022-sp]. The TTE framework has proven especially useful in fostering improved communication between statisticians and clinicians to align sound study design, incisive data analysis and clinical insight to improve the quality of research (reference).
-This vignette aims to demonstrate the TTE framework using the TrialEmulation R package. We will use a simulated data set to illustrate how to create an analysis-ready data set for a target trial emulation. The data set is structured in a way that allows us to perform case I) intention-to-treat (ITT) and case II) per-protocol (PP) analyses, which are common in clinical trials.
+This vignette aims to demonstrate the TTE framework using the TrialEmulation R package. We will use a simulated data set to illustrate how an analysis-ready data set for a target trial emulation, for either itenton to treatment (ITT) or per protocal(PP) analysis, is created under hood. Then we will demostrate how to utilze the functions in the TrialEmulation R package to create the analysis-ready data sets and analyze the data. 
 
 ```{r setup, include=FALSE}
-knitr::opts_knit$set(root.dir = "C:\\Users\\u0399057\\Box\\Private\\Kevin Ying\\TTE vignette")
+knitr::opts_knit$set(root.dir = "/Users/kevinying/TTEvignette")
 ```
-
-We use the example data from the TrialEmulation R package to do the demonstration. Below we load the needed R packages. 
+#Fist we will illustrate how to create an analysis-ready data set for a target trial emulation using our own code. 
+We use the example data from the TrialEmulation R package to do the demonstration. Below we load the needed R packages and import the data.
 ```{r echo=F}
 library(TrialEmulation)
 data(data_censored)
 ```
+WE will only use the assignment at baseline and baseline covariates in the data set.
 ```{r}
 library(dplyr)
 library(lubridate)
@@ -42,19 +43,17 @@ data_censored_temp <- data_censored %>%
   select(id, treatment, x3, x4)
 ```
 
-# Simualte the data for applying eligible criteria
-# Eligible criteria: 1) No dementia at and prior to time zero, 2) index window is 2000-2017 
+We simulate the data for applying eligible criteria. We simulate that the patients initial the treatment between 2000 and 2018, and we assume that 3 patients have dementia at baseline. 
 ```{r}
 library(lubridate)
 set.seed(123) 
 tx_init_date <- sample(seq(as.Date('2000/01/01'), as.Date('2018/12/31'), by="day"), nrow(data_censored_temp))
 BL_dementia <- rep(0, nrow(data_censored_temp))
-BL_dementia[c(5, 20, 50)] <- 0
+BL_dementia[c(5, 20, 50)] <- 1 # Assume 3 subjects have dementia at baseline
 data_censored_temp2 <-  data.frame(data_censored_temp, tx_init_date, BL_dementia)
 ```
 
-# Simulate follow-up time and event indicator 
-# Outcomes of interest: 1) Dementia with death as the competing event, 2) all-cause mortality, 3) composite outcome of dementia and death 
+We then simulate follow-up time and event indicator. The outcomes of interest: 1) Dementia with death as the competing event, 2) all-cause mortality, 3) composite outcome of dementia and death. Accordingly, we simulate the date of dementia, death and loss to followup. Subjects who have no dementia, no death and no loss to follow-up by 2022/12/31, the date of the end of the study, are administratively censored at that date.
 ```{r}
 set.seed(123)
 # There are 5 possibilities in total when we consider a non-terminal outcome with death as the competing event
@@ -106,8 +105,7 @@ As the first step, we process the data to create an analysis-ready data set for 
 
 At the second step, we remove subjects who are not eligible. In this example case, our eligible criteria are: 1) No dementia at and prior to time zero, 2) index window is 2000-2017. We exclude subjects who do not meet these criteria.
 ```{r}
-data_censored_simp0 <- readRDS("./data_censored_simp4.rds")
-View(data_censored_simp0)
+
 # id --> patient identifier
 # treatment --> indicator for receiving treatment in this period, 1=treatment, 0=non-treatment
 # x3 --> A fixed categorical variable relating to treatment and the outcome
