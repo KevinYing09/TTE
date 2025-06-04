@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<meta name="author" content="Kevin Ying" />
+
+<meta name="date" content="2025-05-28" />
+
+<title>Target Trial Emulation</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+<style type="text/css">
+
+div.csl-bib-body { }
+div.csl-entry {
+clear: both;
+margin-bottom: 0em;
+}
+.hanging div.csl-entry {
+margin-left:2em;
+text-indent:-2em;
+}
+div.csl-left-margin {
+min-width:2em;
+float:left;
+}
+div.csl-right-inline {
+margin-left:2em;
+padding-left:1em;
+}
+div.csl-indent {
+margin-left: 2em;
+}
+</style>
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Target Trial Emulation</h1>
+<h4 class="author">Kevin Ying</h4>
+<h4 class="date">2025-05-28</h4>
+
+
+
+<p>Randomized controlled trials (RCTs) are the gold standard for
+evaluating medical interventions, but they are often impractical, slow,
+or costly. Modern causal inference methods, coupled with real-world data
+(RWD), provide a faster, well-powered alternative for estimating
+treatment effects across diverse patient populations.Despite this
+potential, several barriers hinder their effective use in translational
+research. A key challenge is aligning “time zero,” the point at which a
+patient cohort is defined, eligibility, and treatment assignment, which
+leads to intractable bias. Other barriers include biases induced from
+data preprocessing, confounding, or strong modeling assumptions. Target
+trial emulation (TTE) is a major innovation that addresses these
+barriers by emulating RCT protocols using RWD <span class="citation">(<a href="#ref-Hernan2022-sp">Hernán, Wang, and Leaf 2022</a>)</span>. The
+TTE framework has proven especially useful in fostering improved
+communication between statisticians and clinicians to align sound study
+design, incisive data analysis and clinical insight to improve the
+quality of research (reference). This vignette aims to demonstrate the
+TTE framework using the TrialEmulation R package. We will use a
+simulated data set to illustrate how to create an analysis-ready data
+set for a target trial emulation. The data set is structured in a way
+that allows us to perform case I) intention-to-treat (ITT) and case II)
+per-protocol (PP) analyses, which are common in clinical trials.</p>
+<div id="we-use-the-exmaple-data-from-the-trialemulation-r-package" class="section level1">
+<h1>We use the exmaple data from the TrialEmulation R package</h1>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(TrialEmulation)</span>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="fu">library</span>(dplyr)</span>
+<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a><span class="co">#&gt; Attaching package: &#39;dplyr&#39;</span></span>
+<span id="cb1-5"><a href="#cb1-5" tabindex="-1"></a><span class="co">#&gt; The following objects are masked from &#39;package:stats&#39;:</span></span>
+<span id="cb1-6"><a href="#cb1-6" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb1-7"><a href="#cb1-7" tabindex="-1"></a><span class="co">#&gt;     filter, lag</span></span>
+<span id="cb1-8"><a href="#cb1-8" tabindex="-1"></a><span class="co">#&gt; The following objects are masked from &#39;package:base&#39;:</span></span>
+<span id="cb1-9"><a href="#cb1-9" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb1-10"><a href="#cb1-10" tabindex="-1"></a><span class="co">#&gt;     intersect, setdiff, setequal, union</span></span></code></pre></div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">library</span>(lubridate)</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a><span class="co">#&gt; Attaching package: &#39;lubridate&#39;</span></span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="co">#&gt; The following objects are masked from &#39;package:base&#39;:</span></span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a><span class="co">#&gt;     date, intersect, setdiff, union</span></span></code></pre></div>
+<div id="case-i-a-new-user-active-comparator-design-intention-to-treat-analysis" class="section level2">
+<h2>Case I: A new-user, active comparator design; Intention-to-treat
+analysis</h2>
+<p>Data structure: one-patient-per-row</p>
+<ol style="list-style-type: decimal">
+<li>Eligibility criteria -&gt; This data set includes the study cohort
+of interest<br />
+</li>
+<li>Treatment strategies -&gt; The data set contains the treatment
+variable that clearly groups individuals</li>
+<li>Treatment assignment -&gt; The data set contains preselected
+baseline covariates (time-invariant) for controlling for
+confounding<br />
+</li>
+<li>Follow-up -&gt; This data set clearly defines time zero (i.e., start
+of the follow-up) of the analysis and follow-up time</li>
+<li>Outcome -&gt; The data set contains time-to-event outcomes: an event
+indicator and the time to the event</li>
+</ol>
+</div>
+</div>
+<div id="remove-subjects-who-are-not-eligible" class="section level1">
+<h1>Remove subjects who are not eligible</h1>
+</div>
+<div id="eligible-criteria-1-no-dementia-at-and-prior-to-time-zero-2-index-window-is-2000-2017" class="section level1">
+<h1>Eligible criteria: 1) No dementia at and prior to time zero, 2)
+index window is 2000-2017</h1>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>data_censored_simp0 <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(<span class="st">&quot;./data_censored_simp4.rds&quot;</span>)</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a><span class="fu">View</span>(data_censored_simp0)</span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a><span class="co"># id --&gt; patient identifier</span></span>
+<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a><span class="co"># treatment --&gt; indicator for receiving treatment in this period, 1=treatment, 0=non-treatment</span></span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a><span class="co"># x3 --&gt; A fixed categorical variable relating to treatment and the outcome</span></span>
+<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a><span class="co"># x4 --&gt; A fixed categorical variable relating to treatment and the outcome </span></span>
+<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a></span>
+<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a><span class="co"># Create a flag for eligibility</span></span>
+<span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a>data_censored_simp1 <span class="ot">&lt;-</span> data_censored_simp0 <span class="sc">%&gt;%</span></span>
+<span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">eligible =</span> <span class="fu">ifelse</span>(<span class="fu">year</span>(tx_init_date) <span class="sc">&lt;=</span> <span class="dv">2017</span> <span class="sc">&amp;</span> BL_dementia <span class="sc">==</span> <span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">0</span>))</span>
+<span id="cb3-11"><a href="#cb3-11" tabindex="-1"></a></span>
+<span id="cb3-12"><a href="#cb3-12" tabindex="-1"></a><span class="co"># How many subjects are eligible?</span></span>
+<span id="cb3-13"><a href="#cb3-13" tabindex="-1"></a><span class="fu">table</span>(data_censored_simp1<span class="sc">$</span>eligible)</span>
+<span id="cb3-14"><a href="#cb3-14" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb3-15"><a href="#cb3-15" tabindex="-1"></a><span class="co">#&gt;  0  1 </span></span>
+<span id="cb3-16"><a href="#cb3-16" tabindex="-1"></a><span class="co">#&gt;  5 84</span></span></code></pre></div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a></span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a><span class="co"># Remove ineligible subjects</span></span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>data_censored_simp4 <span class="ot">&lt;-</span> data_censored_simp1 <span class="sc">%&gt;%</span> </span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>  <span class="fu">filter</span>(eligible <span class="sc">==</span> <span class="dv">1</span>)</span></code></pre></div>
+</div>
+<div id="create-the-outcomes-of-interest" class="section level1">
+<h1>Create the outcomes of interest:</h1>
+</div>
+<div id="dementia-with-death-as-the-competing-event" class="section level1">
+<h1>1) Dementia with death as the competing event</h1>
+</div>
+<div id="all-cause-mortality" class="section level1">
+<h1>2) all-cause mortality</h1>
+</div>
+<div id="composite-outcome-of-dementia-and-death" class="section level1">
+<h1>3) composite outcome of dementia and death</h1>
+</div>
+<div id="there-are-5-possibilities-when-we-consider-a-non-terminal-outcome-with-death-as-the-competing-event" class="section level1">
+<h1>There are 5 possibilities when we consider a non-terminal outcome
+with death as the competing event</h1>
+</div>
+<div id="dementia-death-loss-to-follow-up" class="section level1">
+<h1>dementia death loss-to-follow-up</h1>
+</div>
+<div id="section" class="section level1">
+<h1>1) 0 0 1</h1>
+</div>
+<div id="administratively-censored" class="section level1">
+<h1>2) 0 0 0 –&gt; administratively censored</h1>
+</div>
+<div id="section-1" class="section level1">
+<h1>3) 1 1 0</h1>
+</div>
+<div id="section-2" class="section level1">
+<h1>4) 1 0 0</h1>
+</div>
+<div id="section-3" class="section level1">
+<h1>5) 0 1 0</h1>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a><span class="co"># Create all-cause death outcome and (intermediate) dementia outcome</span></span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>data_censored_simp5 <span class="ot">&lt;-</span> data_censored_simp4 <span class="sc">%&gt;%</span></span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">ad_censor_days =</span> <span class="fu">as.numeric</span>(<span class="fu">as.Date</span>(<span class="st">&quot;2022-12-31&quot;</span>)<span class="sc">-</span>tx_init_date),</span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a>         </span>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a>         <span class="at">death_days0 =</span> <span class="fu">ifelse</span>(<span class="fu">is.na</span>(death_date)<span class="sc">==</span><span class="cn">FALSE</span>, <span class="fu">as.numeric</span>(death_date<span class="sc">-</span>tx_init_date),  <span class="fu">as.numeric</span>(last_fu_date<span class="sc">-</span>tx_init_date)),</span>
+<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a>         <span class="at">death_days =</span> <span class="fu">pmin</span>(death_days0, ad_censor_days),</span>
+<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a>         <span class="at">death =</span> <span class="fu">ifelse</span>(death_days0 <span class="sc">&lt;=</span> ad_censor_days <span class="sc">&amp;</span> death<span class="sc">==</span><span class="dv">1</span>, <span class="dv">1</span>, <span class="dv">0</span>),</span>
+<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a>         </span>
+<span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a>         <span class="at">dementia_days0 =</span> <span class="fu">ifelse</span>(<span class="fu">is.na</span>(dementia_date)<span class="sc">==</span><span class="cn">FALSE</span>, <span class="fu">as.numeric</span>(dementia_date<span class="sc">-</span>tx_init_date), <span class="fu">as.numeric</span>(last_fu_date<span class="sc">-</span>tx_init_date)),</span>
+<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a>         <span class="at">dementia_days =</span> <span class="fu">pmin</span>(dementia_days0, ad_censor_days),</span>
+<span id="cb5-11"><a href="#cb5-11" tabindex="-1"></a>         <span class="at">dementia =</span> <span class="fu">ifelse</span>(dementia_days0 <span class="sc">&lt;=</span> ad_censor_days <span class="sc">&amp;</span> dementia<span class="sc">==</span><span class="dv">1</span>, <span class="dv">1</span>, <span class="dv">0</span>))</span>
+<span id="cb5-12"><a href="#cb5-12" tabindex="-1"></a></span>
+<span id="cb5-13"><a href="#cb5-13" tabindex="-1"></a><span class="co"># In real data, need to check if any dementia event occurs after the end of follow-up or death</span></span>
+<span id="cb5-14"><a href="#cb5-14" tabindex="-1"></a></span>
+<span id="cb5-15"><a href="#cb5-15" tabindex="-1"></a><span class="co"># Create composite outcome and final dementia outcome with competing event of death</span></span>
+<span id="cb5-16"><a href="#cb5-16" tabindex="-1"></a>data_censored_simp6 <span class="ot">&lt;-</span> data_censored_simp5 <span class="sc">%&gt;%</span></span>
+<span id="cb5-17"><a href="#cb5-17" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">death_dementia =</span> <span class="fu">ifelse</span>(death<span class="sc">==</span><span class="dv">1</span><span class="sc">|</span>dementia<span class="sc">==</span><span class="dv">1</span>, <span class="dv">1</span>, <span class="dv">0</span>),</span>
+<span id="cb5-18"><a href="#cb5-18" tabindex="-1"></a>         <span class="at">death_dementia_days =</span> <span class="fu">ifelse</span>(death<span class="sc">==</span><span class="dv">1</span> <span class="sc">&amp;</span> dementia<span class="sc">==</span><span class="dv">0</span>, death_days, </span>
+<span id="cb5-19"><a href="#cb5-19" tabindex="-1"></a>                                      <span class="fu">ifelse</span>(death<span class="sc">==</span><span class="dv">0</span> <span class="sc">&amp;</span> dementia<span class="sc">==</span><span class="dv">1</span>, dementia_days, <span class="fu">pmin</span>(dementia_days, death_days))),</span>
+<span id="cb5-20"><a href="#cb5-20" tabindex="-1"></a>         </span>
+<span id="cb5-21"><a href="#cb5-21" tabindex="-1"></a>         <span class="at">dementia_compete_death =</span> <span class="fu">ifelse</span>(dementia<span class="sc">==</span><span class="dv">1</span>, <span class="dv">1</span>,</span>
+<span id="cb5-22"><a href="#cb5-22" tabindex="-1"></a>                                     <span class="fu">ifelse</span>(death<span class="sc">==</span><span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">0</span>)),</span>
+<span id="cb5-23"><a href="#cb5-23" tabindex="-1"></a>         <span class="at">dementia_compete_death_days =</span> death_dementia_days)</span></code></pre></div>
+</div>
+<div id="save-the-clean-data-for-downstream-analyses" class="section level1">
+<h1>Save the clean data for downstream analyses</h1>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a>data_censored_simp_ITT <span class="ot">&lt;-</span> data_censored_simp6 <span class="sc">%&gt;%</span></span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(id, treatment, x3, x4, </span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a>                death, death_days, death_dementia, death_dementia_days,</span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a>                dementia_compete_death, dementia_compete_death_days) </span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a><span class="fu">saveRDS</span>(data_censored_simp_ITT, <span class="at">file=</span><span class="st">&quot;./data_censored_simp_ITT.rds&quot;</span>) </span></code></pre></div>
+<div id="case-ii-a-new-user-active-comparator-design-per-protocol-analysis" class="section level2">
+<h2>Case II: A new-user, active comparator design; Per-protocol
+analysis</h2>
+<p>Data structure: person-time long format</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="fu">library</span>(TrialEmulation)</span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="fu">data</span>(data_censored) </span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a></span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a>data_censored_simp_PP <span class="ot">&lt;-</span> data_censored <span class="sc">%&gt;%</span></span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">period =</span> period <span class="sc">+</span> <span class="dv">1</span>,</span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a>         <span class="at">age =</span> <span class="fu">case_when</span>(period<span class="sc">==</span><span class="dv">1</span> <span class="sc">~</span> age<span class="sc">*</span><span class="dv">12</span>,</span>
+<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a>                         <span class="cn">TRUE</span> <span class="sc">~</span> age<span class="sc">*</span><span class="dv">12-11</span><span class="sc">*</span>(period<span class="dv">-1</span>))) <span class="sc">%&gt;%</span></span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a>  <span class="fu">rename</span>(<span class="at">month =</span> period, <span class="at">event =</span> outcome, <span class="at">LTFU =</span> censored) <span class="sc">%&gt;%</span></span>
+<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a>  <span class="fu">select</span>(<span class="sc">-</span><span class="fu">c</span>(age_s, eligible)) </span>
+<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a></span>
+<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a><span class="fu">View</span>(data_censored_simp_PP)</span>
+<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a><span class="co"># id patient identifier</span></span>
+<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a><span class="co"># month time period</span></span>
+<span id="cb7-14"><a href="#cb7-14" tabindex="-1"></a><span class="co"># treatment indicator for receiving treatment in this period, 1=treatment, 0=non-treatment</span></span>
+<span id="cb7-15"><a href="#cb7-15" tabindex="-1"></a><span class="co"># x1 A time-varying categorical variable relating to treatment and the outcome</span></span>
+<span id="cb7-16"><a href="#cb7-16" tabindex="-1"></a><span class="co"># x2 A time-varying numeric variable relating to treatment and the outcome</span></span>
+<span id="cb7-17"><a href="#cb7-17" tabindex="-1"></a><span class="co"># x3 A fixed categorical variable relating to treatment and the outcome</span></span>
+<span id="cb7-18"><a href="#cb7-18" tabindex="-1"></a><span class="co"># x4 A fixed categorical variable relating to treatment and the outcome</span></span>
+<span id="cb7-19"><a href="#cb7-19" tabindex="-1"></a><span class="co"># age patient age in months</span></span>
+<span id="cb7-20"><a href="#cb7-20" tabindex="-1"></a><span class="co"># event event indicator </span></span>
+<span id="cb7-21"><a href="#cb7-21" tabindex="-1"></a><span class="co"># LTFU censoring indicator</span></span>
+<span id="cb7-22"><a href="#cb7-22" tabindex="-1"></a></span>
+<span id="cb7-23"><a href="#cb7-23" tabindex="-1"></a><span class="co"># Issues in real data: </span></span>
+<span id="cb7-24"><a href="#cb7-24" tabindex="-1"></a><span class="co"># 1. Missing data in time-varying covariates</span></span>
+<span id="cb7-25"><a href="#cb7-25" tabindex="-1"></a><span class="co"># 2. Missing entire visit months --&gt; aggregate data: 3- or 6-month intervals </span></span></code></pre></div>
+</div>
+</div>
+<div id="create-treatment-adherence-variable" class="section level1">
+<h1>Create treatment adherence variable</h1>
+</div>
+<div id="consider-a-strict-protocol-of-1-adhering-to-initial-treatment-every-month-2-no-contraindication-is-allowed" class="section level1">
+<h1>Consider a strict protocol of 1) adhering to initial treatment every
+month, 2) no contraindication is allowed</h1>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a>tmp <span class="ot">&lt;-</span> data_censored_simp_PP <span class="sc">%&gt;%</span></span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a>  <span class="fu">group_by</span>(id) <span class="sc">%&gt;%</span></span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="fu">row_number</span>()<span class="sc">==</span><span class="dv">1</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>  <span class="fu">rename</span>(<span class="at">tx0 =</span> treatment) <span class="sc">%&gt;%</span></span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a>  <span class="fu">select</span>(id, tx0)</span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a>  </span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a>data_censored_simp_PP2 <span class="ot">&lt;-</span> data_censored_simp_PP <span class="sc">%&gt;%</span> <span class="fu">left_join</span>(tmp, <span class="at">by =</span> <span class="st">&quot;id&quot;</span>)</span>
+<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a>data_censored_simp_PP3 <span class="ot">&lt;-</span> data_censored_simp_PP2 <span class="sc">%&gt;%</span></span>
+<span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">adherence =</span> <span class="fu">ifelse</span>(treatment <span class="sc">==</span> tx0, <span class="dv">1</span>, <span class="dv">0</span>))</span>
+<span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a><span class="fu">View</span>(data_censored_simp_PP3)</span></code></pre></div>
+</div>
+<div id="create-artifically-censored-variable-assume-monotone-censoring" class="section level1">
+<h1>Create artifically censored variable –&gt; assume monotone
+censoring</h1>
+</div>
+<div id="remove-the-rows-of-data-after-deviating-from-the-protocol" class="section level1">
+<h1>remove the rows of data after deviating from the protocol</h1>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a>data_censored_simp_PP4 <span class="ot">&lt;-</span> data_censored_simp_PP3 <span class="sc">%&gt;%</span></span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">art_censored =</span> <span class="dv">1</span><span class="sc">-</span>adherence)</span>
+<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a>  </span>
+<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a>data_censored_simp_PP5  <span class="ot">&lt;-</span> data_censored_simp_PP4 <span class="sc">%&gt;%</span> </span>
+<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a>  <span class="fu">group_by</span>(id) <span class="sc">%&gt;%</span> </span>
+<span id="cb9-6"><a href="#cb9-6" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">cum_art_censored =</span> <span class="fu">cumsum</span>(art_censored)) <span class="sc">%&gt;%</span> </span>
+<span id="cb9-7"><a href="#cb9-7" tabindex="-1"></a>  <span class="fu">filter</span>(cum_art_censored <span class="sc">%in%</span> <span class="fu">c</span>(<span class="dv">0</span>,<span class="dv">1</span>)) <span class="sc">%&gt;%</span> <span class="co"># We keep the row of being artificially censored for estimating the adherence probabilities </span></span>
+<span id="cb9-8"><a href="#cb9-8" tabindex="-1"></a>  <span class="fu">select</span>(<span class="sc">-</span>cum_art_censored)</span>
+<span id="cb9-9"><a href="#cb9-9" tabindex="-1"></a></span>
+<span id="cb9-10"><a href="#cb9-10" tabindex="-1"></a><span class="fu">View</span>(data_censored_simp_PP5)</span></code></pre></div>
+<div id="case-iii-a-new-user-placebo-control-design-intention-to-treat-analysis-trialemulation" class="section level2">
+<h2>Case III: A new-user, placebo control design; Intention-to-treat
+analysis (TrialEmulation)</h2>
+<p>Data structure: person-trial long format</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a><span class="fu">library</span>(TrialEmulation)</span>
+<span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a><span class="fu">data</span>(data_censored)</span>
+<span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a><span class="fu">View</span>(data_censored)</span>
+<span id="cb10-4"><a href="#cb10-4" tabindex="-1"></a><span class="co"># age_s standardized patient age</span></span>
+<span id="cb10-5"><a href="#cb10-5" tabindex="-1"></a></span>
+<span id="cb10-6"><a href="#cb10-6" tabindex="-1"></a><span class="co"># Expand data using data_preparation </span></span>
+<span id="cb10-7"><a href="#cb10-7" tabindex="-1"></a><span class="co"># Assume random/independent censoring </span></span>
+<span id="cb10-8"><a href="#cb10-8" tabindex="-1"></a>data_censored_ITT <span class="ot">&lt;-</span> <span class="fu">data_preparation</span>(data_censored, <span class="at">estimand_type =</span> <span class="st">&quot;ITT&quot;</span>, <span class="at">outcome_cov =</span> <span class="sc">~</span>x1<span class="sc">+</span>x2<span class="sc">+</span>x3<span class="sc">+</span>x4<span class="sc">+</span>age_s)</span>
+<span id="cb10-9"><a href="#cb10-9" tabindex="-1"></a><span class="co">#&gt; Starting data manipulation</span></span>
+<span id="cb10-10"><a href="#cb10-10" tabindex="-1"></a><span class="co">#&gt; Starting data extension</span></span>
+<span id="cb10-11"><a href="#cb10-11" tabindex="-1"></a><span class="co">#&gt; Summary of extended data:</span></span>
+<span id="cb10-12"><a href="#cb10-12" tabindex="-1"></a><span class="co">#&gt; Number of observations: 1558</span></span>
+<span id="cb10-13"><a href="#cb10-13" tabindex="-1"></a><span class="co">#&gt; ------------------------------------------------------------</span></span></code></pre></div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a>data_censored_ITT<span class="sc">$</span>min_period</span>
+<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a><span class="co">#&gt; [1] 0</span></span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a>data_censored_ITT<span class="sc">$</span>max_period <span class="co"># A sequence of 20 trials</span></span>
+<span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a><span class="co">#&gt; [1] 19</span></span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a></span>
+<span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a><span class="co"># total number of subjects in the expanded data </span></span>
+<span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a>data_censored_ITT<span class="sc">$</span>N</span>
+<span id="cb13-4"><a href="#cb13-4" tabindex="-1"></a><span class="co">#&gt; [1] 1558</span></span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a></span>
+<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a><span class="co"># expanded data </span></span>
+<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a>data_censored_ITT_dat <span class="ot">&lt;-</span> data_censored_ITT<span class="sc">$</span>data</span>
+<span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a><span class="fu">View</span>(data_censored_ITT_dat)</span>
+<span id="cb14-5"><a href="#cb14-5" tabindex="-1"></a></span>
+<span id="cb14-6"><a href="#cb14-6" tabindex="-1"></a>data_censored_ITT_dat_id2 <span class="ot">&lt;-</span> data_censored_ITT_dat <span class="sc">%&gt;%</span> </span>
+<span id="cb14-7"><a href="#cb14-7" tabindex="-1"></a>  <span class="fu">filter</span>(id <span class="sc">==</span> <span class="dv">2</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb14-8"><a href="#cb14-8" tabindex="-1"></a>  <span class="fu">arrange</span>(id, trial_period, followup_time)</span>
+<span id="cb14-9"><a href="#cb14-9" tabindex="-1"></a><span class="fu">View</span>(data_censored_ITT_dat_id2)</span>
+<span id="cb14-10"><a href="#cb14-10" tabindex="-1"></a></span>
+<span id="cb14-11"><a href="#cb14-11" tabindex="-1"></a>data_censored_ITT_dat_id4 <span class="ot">&lt;-</span> data_censored_ITT_dat <span class="sc">%&gt;%</span> </span>
+<span id="cb14-12"><a href="#cb14-12" tabindex="-1"></a>  <span class="fu">filter</span>(id <span class="sc">==</span> <span class="dv">4</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb14-13"><a href="#cb14-13" tabindex="-1"></a>  <span class="fu">arrange</span>(id, trial_period, followup_time)</span>
+<span id="cb14-14"><a href="#cb14-14" tabindex="-1"></a><span class="fu">View</span>(data_censored_ITT_dat_id4)</span></code></pre></div>
+</div>
+</div>
+<div id="explore-dependent-censoring" class="section level1">
+<h1>Explore dependent censoring</h1>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a>data_censored_ITT2 <span class="ot">&lt;-</span> <span class="fu">data_preparation</span>(data_censored, <span class="at">estimand_type =</span> <span class="st">&quot;ITT&quot;</span>, <span class="at">outcome_cov =</span> <span class="sc">~</span>x1<span class="sc">+</span>x2<span class="sc">+</span>x3<span class="sc">+</span>x4<span class="sc">+</span>age_s,</span>
+<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a>                                       <span class="at">use_censor_weights =</span> <span class="cn">TRUE</span>, <span class="at">cense =</span> <span class="st">&quot;censored&quot;</span>, </span>
+<span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a>                                       <span class="at">cense_d_cov =</span> <span class="sc">~</span> x1 <span class="sc">+</span> x2 <span class="sc">+</span> x3 <span class="sc">+</span> x4 <span class="sc">+</span> age_s, <span class="at">cense_n_cov =</span> <span class="sc">~</span> x3 <span class="sc">+</span> x4,</span>
+<span id="cb15-4"><a href="#cb15-4" tabindex="-1"></a>                                       <span class="at">pool_cense =</span> <span class="st">&quot;numerator&quot;</span>, <span class="co"># does not allow the numerator model to be fitted separately for the treatment groups</span></span>
+<span id="cb15-5"><a href="#cb15-5" tabindex="-1"></a>                                       <span class="at">glm_function =</span> <span class="st">&quot;parglm&quot;</span>, <span class="at">nthreads =</span> <span class="dv">4</span>, <span class="at">method =</span> <span class="st">&quot;FAST&quot;</span>, <span class="at">quiet =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb15-6"><a href="#cb15-6" tabindex="-1"></a></span>
+<span id="cb15-7"><a href="#cb15-7" tabindex="-1"></a>data_censored_ITT2<span class="sc">$</span>censor_models</span>
+<span id="cb15-8"><a href="#cb15-8" tabindex="-1"></a><span class="co">#&gt; $cens_d0</span></span>
+<span id="cb15-9"><a href="#cb15-9" tabindex="-1"></a><span class="co">#&gt; Model for P(cense = 0 | X, previous treatment = 0) for denominator </span></span>
+<span id="cb15-10"><a href="#cb15-10" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb15-11"><a href="#cb15-11" tabindex="-1"></a><span class="co">#&gt;         term   estimate std.error  statistic      p.value</span></span>
+<span id="cb15-12"><a href="#cb15-12" tabindex="-1"></a><span class="co">#&gt;  (Intercept)  1.1711078 0.3237499  3.6173225 2.976663e-04</span></span>
+<span id="cb15-13"><a href="#cb15-13" tabindex="-1"></a><span class="co">#&gt;           x1  0.8894661 0.3959247  2.2465535 2.466858e-02</span></span>
+<span id="cb15-14"><a href="#cb15-14" tabindex="-1"></a><span class="co">#&gt;           x2 -0.8916975 0.2155173 -4.1374761 3.511471e-05</span></span>
+<span id="cb15-15"><a href="#cb15-15" tabindex="-1"></a><span class="co">#&gt;           x3 -0.3601528 0.3842799 -0.9372148 3.486481e-01</span></span>
+<span id="cb15-16"><a href="#cb15-16" tabindex="-1"></a><span class="co">#&gt;           x4 -0.3068672 0.1921708 -1.5968463 1.103000e-01</span></span>
+<span id="cb15-17"><a href="#cb15-17" tabindex="-1"></a><span class="co">#&gt;        age_s  1.3706745 0.2279017  6.0143243 1.806385e-09</span></span>
+<span id="cb15-18"><a href="#cb15-18" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb15-19"><a href="#cb15-19" tabindex="-1"></a><span class="co">#&gt;  null.deviance df.null    logLik      AIC      BIC deviance df.residual nobs</span></span>
+<span id="cb15-20"><a href="#cb15-20" tabindex="-1"></a><span class="co">#&gt;       283.0723     425 -96.46007 204.9201 229.2468 192.9201         420  426</span></span>
+<span id="cb15-21"><a href="#cb15-21" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb15-22"><a href="#cb15-22" tabindex="-1"></a><span class="co">#&gt; $cens_d1</span></span>
+<span id="cb15-23"><a href="#cb15-23" tabindex="-1"></a><span class="co">#&gt; Model for P(cense = 0 | X, previous treatment = 1) for denominator </span></span>
+<span id="cb15-24"><a href="#cb15-24" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb15-25"><a href="#cb15-25" tabindex="-1"></a><span class="co">#&gt;         term   estimate std.error  statistic      p.value</span></span>
+<span id="cb15-26"><a href="#cb15-26" tabindex="-1"></a><span class="co">#&gt;  (Intercept)  1.8585422 0.4482425  4.1462873 3.379098e-05</span></span>
+<span id="cb15-27"><a href="#cb15-27" tabindex="-1"></a><span class="co">#&gt;           x1  0.9488075 0.8076645  1.1747544 2.400930e-01</span></span>
+<span id="cb15-28"><a href="#cb15-28" tabindex="-1"></a><span class="co">#&gt;           x2 -0.1014577 0.3008652 -0.3372199 7.359512e-01</span></span>
+<span id="cb15-29"><a href="#cb15-29" tabindex="-1"></a><span class="co">#&gt;           x3  1.4788555 0.6408347  2.3077020 2.101572e-02</span></span>
+<span id="cb15-30"><a href="#cb15-30" tabindex="-1"></a><span class="co">#&gt;           x4 -0.6532912 0.3336118 -1.9582374 5.020217e-02</span></span>
+<span id="cb15-31"><a href="#cb15-31" tabindex="-1"></a><span class="co">#&gt;        age_s  0.8717044 0.3704446  2.3531304 1.861610e-02</span></span>
+<span id="cb15-32"><a href="#cb15-32" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb15-33"><a href="#cb15-33" tabindex="-1"></a><span class="co">#&gt;  null.deviance df.null    logLik      AIC      BIC deviance df.residual nobs</span></span>
+<span id="cb15-34"><a href="#cb15-34" tabindex="-1"></a><span class="co">#&gt;       113.0528     298 -48.03073 108.0615 130.2641 96.06146         293  299</span></span>
+<span id="cb15-35"><a href="#cb15-35" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb15-36"><a href="#cb15-36" tabindex="-1"></a><span class="co">#&gt; $cens_pool_n</span></span>
+<span id="cb15-37"><a href="#cb15-37" tabindex="-1"></a><span class="co">#&gt; Model for P(cense = 0 | X) for numerator </span></span>
+<span id="cb15-38"><a href="#cb15-38" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb15-39"><a href="#cb15-39" tabindex="-1"></a><span class="co">#&gt;         term    estimate std.error  statistic      p.value</span></span>
+<span id="cb15-40"><a href="#cb15-40" tabindex="-1"></a><span class="co">#&gt;  (Intercept)  2.37772009 0.1984882 11.9791508 4.569804e-33</span></span>
+<span id="cb15-41"><a href="#cb15-41" tabindex="-1"></a><span class="co">#&gt;           x3  0.06530091 0.2819587  0.2315974 8.168507e-01</span></span>
+<span id="cb15-42"><a href="#cb15-42" tabindex="-1"></a><span class="co">#&gt;           x4 -0.53488417 0.1479895 -3.6143375 3.011167e-04</span></span>
+<span id="cb15-43"><a href="#cb15-43" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb15-44"><a href="#cb15-44" tabindex="-1"></a><span class="co">#&gt;  null.deviance df.null   logLik     AIC      BIC deviance df.residual nobs</span></span>
+<span id="cb15-45"><a href="#cb15-45" tabindex="-1"></a><span class="co">#&gt;       404.2156     724 -195.136 396.272 410.0305  390.272         722  725</span></span></code></pre></div>
+</div>
+<div id="case-iv-a-new-user-placebo-control-design-per-protocol-analysis" class="section level1">
+<h1>Case IV: A new-user, placebo control design; Per-protocol
+analysis</h1>
+<p>Data structure: person-trial-time long format</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" tabindex="-1"></a><span class="fu">library</span>(TrialEmulation)</span>
+<span id="cb16-2"><a href="#cb16-2" tabindex="-1"></a><span class="fu">data</span>(data_censored)</span>
+<span id="cb16-3"><a href="#cb16-3" tabindex="-1"></a><span class="fu">View</span>(data_censored)</span>
+<span id="cb16-4"><a href="#cb16-4" tabindex="-1"></a></span>
+<span id="cb16-5"><a href="#cb16-5" tabindex="-1"></a><span class="co"># Expand data using data_preparation </span></span>
+<span id="cb16-6"><a href="#cb16-6" tabindex="-1"></a>data_censored_PP <span class="ot">&lt;-</span> <span class="fu">data_preparation</span>(data_censored, <span class="at">estimand_type =</span> <span class="st">&quot;PP&quot;</span>, <span class="at">outcome_cov =</span> <span class="sc">~</span>x1<span class="sc">+</span>x2<span class="sc">+</span>x3<span class="sc">+</span>x4<span class="sc">+</span>age_s,</span>
+<span id="cb16-7"><a href="#cb16-7" tabindex="-1"></a>                                     <span class="at">switch_d_cov =</span> <span class="sc">~</span> x1 <span class="sc">+</span> x2 <span class="sc">+</span> x3 <span class="sc">+</span> x4 <span class="sc">+</span> age_s <span class="sc">+</span> time_on_regime <span class="sc">+</span> <span class="fu">I</span>(time_on_regime<span class="sc">^</span><span class="dv">2</span>),</span>
+<span id="cb16-8"><a href="#cb16-8" tabindex="-1"></a>                                     <span class="at">switch_n_cov =</span> <span class="sc">~</span> x3 <span class="sc">+</span> x4 <span class="sc">+</span> time_on_regime <span class="sc">+</span> <span class="fu">I</span>(time_on_regime<span class="sc">^</span><span class="dv">2</span>),</span>
+<span id="cb16-9"><a href="#cb16-9" tabindex="-1"></a>                                     <span class="at">use_censor_weights =</span> <span class="cn">TRUE</span>, <span class="at">cense =</span> <span class="st">&quot;censored&quot;</span>, </span>
+<span id="cb16-10"><a href="#cb16-10" tabindex="-1"></a>                                     <span class="at">cense_d_cov =</span> <span class="sc">~</span> x1 <span class="sc">+</span> x2 <span class="sc">+</span> x3 <span class="sc">+</span> x4 <span class="sc">+</span> age_s, <span class="at">cense_n_cov =</span> <span class="sc">~</span> x3 <span class="sc">+</span> x4,</span>
+<span id="cb16-11"><a href="#cb16-11" tabindex="-1"></a>                                     <span class="at">pool_cense =</span> <span class="st">&quot;none&quot;</span>, </span>
+<span id="cb16-12"><a href="#cb16-12" tabindex="-1"></a>                                     <span class="at">glm_function =</span> <span class="st">&quot;parglm&quot;</span>, <span class="at">nthreads =</span> <span class="dv">4</span>, <span class="at">method =</span> <span class="st">&quot;FAST&quot;</span>, <span class="at">quiet =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb16-13"><a href="#cb16-13" tabindex="-1"></a>data_censored_PP<span class="sc">$</span>min_period</span>
+<span id="cb16-14"><a href="#cb16-14" tabindex="-1"></a><span class="co">#&gt; [1] 0</span></span></code></pre></div>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" tabindex="-1"></a>data_censored_PP<span class="sc">$</span>max_period <span class="co"># A sequence of 19 trials</span></span>
+<span id="cb17-2"><a href="#cb17-2" tabindex="-1"></a><span class="co">#&gt; [1] 18</span></span></code></pre></div>
+<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" tabindex="-1"></a></span>
+<span id="cb18-2"><a href="#cb18-2" tabindex="-1"></a><span class="co"># total number of subjects in the expanded data </span></span>
+<span id="cb18-3"><a href="#cb18-3" tabindex="-1"></a>data_censored_PP<span class="sc">$</span>N  </span>
+<span id="cb18-4"><a href="#cb18-4" tabindex="-1"></a><span class="co">#&gt; [1] 500</span></span></code></pre></div>
+<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" tabindex="-1"></a></span>
+<span id="cb19-2"><a href="#cb19-2" tabindex="-1"></a><span class="co"># expanded data </span></span>
+<span id="cb19-3"><a href="#cb19-3" tabindex="-1"></a>data_censored_PP_dat <span class="ot">&lt;-</span> data_censored_PP<span class="sc">$</span>data</span>
+<span id="cb19-4"><a href="#cb19-4" tabindex="-1"></a></span>
+<span id="cb19-5"><a href="#cb19-5" tabindex="-1"></a>data_censored_PP_dat_id2 <span class="ot">&lt;-</span> data_censored_PP_dat <span class="sc">%&gt;%</span> </span>
+<span id="cb19-6"><a href="#cb19-6" tabindex="-1"></a>  <span class="fu">filter</span>(id <span class="sc">==</span> <span class="dv">2</span>)</span>
+<span id="cb19-7"><a href="#cb19-7" tabindex="-1"></a><span class="fu">View</span>(data_censored_PP_dat_id2)</span>
+<span id="cb19-8"><a href="#cb19-8" tabindex="-1"></a></span>
+<span id="cb19-9"><a href="#cb19-9" tabindex="-1"></a>data_censored_PP_dat_id4 <span class="ot">&lt;-</span> data_censored_PP_dat <span class="sc">%&gt;%</span> </span>
+<span id="cb19-10"><a href="#cb19-10" tabindex="-1"></a>  <span class="fu">filter</span>(id <span class="sc">==</span> <span class="dv">4</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb19-11"><a href="#cb19-11" tabindex="-1"></a>  <span class="fu">arrange</span>(id, trial_period, followup_time)</span>
+<span id="cb19-12"><a href="#cb19-12" tabindex="-1"></a><span class="fu">View</span>(data_censored_PP_dat_id4)</span></code></pre></div>
+</div>
+<div id="explore-the-censoring-and-treatment-models" class="section level1">
+<h1>Explore the censoring and treatment models</h1>
+<div class="sourceCode" id="cb20"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" tabindex="-1"></a>working_dir <span class="ot">&lt;-</span> <span class="st">&quot;C:/Users/u0399057/Box/Private/Kevin Ying/TTE vignette&quot;</span></span>
+<span id="cb20-2"><a href="#cb20-2" tabindex="-1"></a>data_censored_PP <span class="ot">&lt;-</span> <span class="fu">data_preparation</span>(data_censored, <span class="at">estimand_type =</span> <span class="st">&quot;PP&quot;</span>, <span class="at">outcome_cov =</span> <span class="sc">~</span>x1<span class="sc">+</span>x2<span class="sc">+</span>x3<span class="sc">+</span>x4<span class="sc">+</span>age_s,</span>
+<span id="cb20-3"><a href="#cb20-3" tabindex="-1"></a>                                     <span class="at">switch_d_cov =</span> <span class="sc">~</span> x1 <span class="sc">+</span> x2 <span class="sc">+</span> x3 <span class="sc">+</span> x4 <span class="sc">+</span> age_s <span class="sc">+</span> time_on_regime <span class="sc">+</span> <span class="fu">I</span>(time_on_regime<span class="sc">^</span><span class="dv">2</span>),</span>
+<span id="cb20-4"><a href="#cb20-4" tabindex="-1"></a>                                     <span class="at">switch_n_cov =</span> <span class="sc">~</span> x3 <span class="sc">+</span> x4 <span class="sc">+</span> time_on_regime <span class="sc">+</span> <span class="fu">I</span>(time_on_regime<span class="sc">^</span><span class="dv">2</span>),</span>
+<span id="cb20-5"><a href="#cb20-5" tabindex="-1"></a>                                     <span class="at">use_censor_weights =</span> <span class="cn">TRUE</span>, <span class="at">cense =</span> <span class="st">&quot;censored&quot;</span>, </span>
+<span id="cb20-6"><a href="#cb20-6" tabindex="-1"></a>                                     <span class="at">cense_d_cov =</span> <span class="sc">~</span> x1 <span class="sc">+</span> x2 <span class="sc">+</span> x3 <span class="sc">+</span> x4 <span class="sc">+</span> age_s, <span class="at">cense_n_cov =</span> <span class="sc">~</span> x3 <span class="sc">+</span> x4,</span>
+<span id="cb20-7"><a href="#cb20-7" tabindex="-1"></a>                                     <span class="at">pool_cense =</span> <span class="st">&quot;none&quot;</span>, </span>
+<span id="cb20-8"><a href="#cb20-8" tabindex="-1"></a>                                     <span class="at">data_dir =</span> working_dir, <span class="at">save_weight_models =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb20-9"><a href="#cb20-9" tabindex="-1"></a>                                     <span class="at">glm_function =</span> <span class="st">&quot;parglm&quot;</span>, <span class="at">nthreads =</span> <span class="dv">4</span>, <span class="at">method =</span> <span class="st">&quot;FAST&quot;</span>, <span class="at">quiet =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb20-10"><a href="#cb20-10" tabindex="-1"></a><span class="co"># View(data_censored_PP$data)</span></span>
+<span id="cb20-11"><a href="#cb20-11" tabindex="-1"></a><span class="co"># Note only baseline values of the time-varying variables are kept in the data set for downstream marginal structural models </span></span>
+<span id="cb20-12"><a href="#cb20-12" tabindex="-1"></a><span class="co"># The row of being artificially censored are not included </span></span>
+<span id="cb20-13"><a href="#cb20-13" tabindex="-1"></a></span>
+<span id="cb20-14"><a href="#cb20-14" tabindex="-1"></a><span class="co"># load the saved models </span></span>
+<span id="cb20-15"><a href="#cb20-15" tabindex="-1"></a>weight_model_switch_d0 <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(<span class="st">&quot;weight_model_switch_d0.rds&quot;</span>)</span>
+<span id="cb20-16"><a href="#cb20-16" tabindex="-1"></a>weight_model_switch_d1 <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(<span class="st">&quot;weight_model_switch_d1.rds&quot;</span>)</span>
+<span id="cb20-17"><a href="#cb20-17" tabindex="-1"></a>weight_model_switch_n0 <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(<span class="st">&quot;weight_model_switch_n0.rds&quot;</span>)</span>
+<span id="cb20-18"><a href="#cb20-18" tabindex="-1"></a>weight_model_switch_n1 <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(<span class="st">&quot;weight_model_switch_n1.rds&quot;</span>)</span>
+<span id="cb20-19"><a href="#cb20-19" tabindex="-1"></a></span>
+<span id="cb20-20"><a href="#cb20-20" tabindex="-1"></a>cense_model_d0 <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(<span class="st">&quot;cense_model_d0.rds&quot;</span>)</span>
+<span id="cb20-21"><a href="#cb20-21" tabindex="-1"></a>cense_model_d1 <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(<span class="st">&quot;cense_model_d1.rds&quot;</span>)</span>
+<span id="cb20-22"><a href="#cb20-22" tabindex="-1"></a>cense_model_n0 <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(<span class="st">&quot;cense_model_n0.rds&quot;</span>)</span>
+<span id="cb20-23"><a href="#cb20-23" tabindex="-1"></a>cense_model_n1 <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(<span class="st">&quot;cense_model_n1.rds&quot;</span>)</span>
+<span id="cb20-24"><a href="#cb20-24" tabindex="-1"></a></span>
+<span id="cb20-25"><a href="#cb20-25" tabindex="-1"></a><span class="co"># Prepare the data set for making predictions --&gt; only looking at trial period zero for now </span></span>
+<span id="cb20-26"><a href="#cb20-26" tabindex="-1"></a>tmp_dat <span class="ot">&lt;-</span> data_censored_PP<span class="sc">$</span>data <span class="sc">%&gt;%</span></span>
+<span id="cb20-27"><a href="#cb20-27" tabindex="-1"></a>  <span class="fu">group_by</span>(id, trial_period) <span class="sc">%&gt;%</span></span>
+<span id="cb20-28"><a href="#cb20-28" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">adherence =</span> <span class="fu">ifelse</span>(treatment <span class="sc">==</span> assigned_treatment, <span class="dv">1</span>, <span class="dv">0</span>), <span class="co"># in the cleaned PP data set, this adherence = 1 everywhere</span></span>
+<span id="cb20-29"><a href="#cb20-29" tabindex="-1"></a>         <span class="at">time_on_regime =</span> <span class="fu">cumsum</span>(adherence)<span class="sc">-</span><span class="dv">1</span>,  <span class="co"># -1 to not account the one at baseline </span></span>
+<span id="cb20-30"><a href="#cb20-30" tabindex="-1"></a>         <span class="at">followup_time2 =</span> followup_time<span class="sc">+</span>trial_period) <span class="sc">%&gt;%</span></span>
+<span id="cb20-31"><a href="#cb20-31" tabindex="-1"></a>  <span class="fu">select</span>(<span class="sc">-</span><span class="fu">c</span>(x1, x2, age_s)) <span class="sc">%&gt;%</span> </span>
+<span id="cb20-32"><a href="#cb20-32" tabindex="-1"></a>  <span class="fu">filter</span>(trial_period <span class="sc">==</span> <span class="dv">0</span>)</span>
+<span id="cb20-33"><a href="#cb20-33" tabindex="-1"></a></span>
+<span id="cb20-34"><a href="#cb20-34" tabindex="-1"></a>data_censored_tmp <span class="ot">&lt;-</span> data_censored <span class="sc">%&gt;%</span></span>
+<span id="cb20-35"><a href="#cb20-35" tabindex="-1"></a>  <span class="fu">rename</span>(<span class="at">followup_time2 =</span> period) <span class="sc">%&gt;%</span></span>
+<span id="cb20-36"><a href="#cb20-36" tabindex="-1"></a>  <span class="fu">select</span>(id, followup_time2, x1, x2, age_s)</span>
+<span id="cb20-37"><a href="#cb20-37" tabindex="-1"></a></span>
+<span id="cb20-38"><a href="#cb20-38" tabindex="-1"></a>tmp_dat2 <span class="ot">&lt;-</span> tmp_dat <span class="sc">%&gt;%</span> </span>
+<span id="cb20-39"><a href="#cb20-39" tabindex="-1"></a>  <span class="fu">left_join</span>(data_censored_tmp, <span class="at">by=</span><span class="fu">c</span>(<span class="st">&quot;id&quot;</span>, <span class="st">&quot;followup_time2&quot;</span>))<span class="sc">%&gt;%</span></span>
+<span id="cb20-40"><a href="#cb20-40" tabindex="-1"></a>  <span class="fu">arrange</span>(id, trial_period, followup_time)</span>
+<span id="cb20-41"><a href="#cb20-41" tabindex="-1"></a></span>
+<span id="cb20-42"><a href="#cb20-42" tabindex="-1"></a></span>
+<span id="cb20-43"><a href="#cb20-43" tabindex="-1"></a><span class="co"># for control arm</span></span>
+<span id="cb20-44"><a href="#cb20-44" tabindex="-1"></a>ctl_dat <span class="ot">&lt;-</span> tmp_dat2 <span class="sc">%&gt;%</span></span>
+<span id="cb20-45"><a href="#cb20-45" tabindex="-1"></a>  <span class="fu">filter</span>(assigned_treatment <span class="sc">==</span> <span class="dv">0</span>)</span>
+<span id="cb20-46"><a href="#cb20-46" tabindex="-1"></a></span>
+<span id="cb20-47"><a href="#cb20-47" tabindex="-1"></a><span class="co"># probabilities of receiving treatment = 1 at each month </span></span>
+<span id="cb20-48"><a href="#cb20-48" tabindex="-1"></a>weight_switch_d0 <span class="ot">&lt;-</span> <span class="fu">predict</span>(weight_model_switch_d0, <span class="at">newdata =</span> ctl_dat, <span class="at">type =</span> <span class="st">&quot;response&quot;</span>)</span>
+<span id="cb20-49"><a href="#cb20-49" tabindex="-1"></a>weight_switch_n0 <span class="ot">&lt;-</span> <span class="fu">predict</span>(weight_model_switch_n0, <span class="at">newdata =</span> ctl_dat, <span class="at">type =</span> <span class="st">&quot;response&quot;</span>)</span>
+<span id="cb20-50"><a href="#cb20-50" tabindex="-1"></a>switch_ctl <span class="ot">&lt;-</span> (<span class="dv">1</span><span class="sc">-</span>weight_switch_n0)<span class="sc">/</span>(<span class="dv">1</span><span class="sc">-</span>weight_switch_d0) <span class="co"># 1-prob(tx = 1) = prob(tx = 0)</span></span>
+<span id="cb20-51"><a href="#cb20-51" tabindex="-1"></a></span>
+<span id="cb20-52"><a href="#cb20-52" tabindex="-1"></a>cense_d0 <span class="ot">&lt;-</span> <span class="fu">predict</span>(cense_model_d0, <span class="at">newdata =</span> ctl_dat, <span class="at">type =</span> <span class="st">&quot;response&quot;</span>)</span>
+<span id="cb20-53"><a href="#cb20-53" tabindex="-1"></a>cense_n0 <span class="ot">&lt;-</span> <span class="fu">predict</span>(cense_model_n0, <span class="at">newdata =</span> ctl_dat, <span class="at">type =</span> <span class="st">&quot;response&quot;</span>)</span>
+<span id="cb20-54"><a href="#cb20-54" tabindex="-1"></a>cense_ctl <span class="ot">&lt;-</span> cense_n0<span class="sc">/</span>cense_d0</span>
+<span id="cb20-55"><a href="#cb20-55" tabindex="-1"></a></span>
+<span id="cb20-56"><a href="#cb20-56" tabindex="-1"></a>ctl_dat2 <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(ctl_dat, switch_ctl, cense_ctl) <span class="sc">%&gt;%</span></span>
+<span id="cb20-57"><a href="#cb20-57" tabindex="-1"></a>  <span class="fu">group_by</span>(id, trial_period) <span class="sc">%&gt;%</span></span>
+<span id="cb20-58"><a href="#cb20-58" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">prod_w =</span> switch_ctl<span class="sc">*</span>cense_ctl,</span>
+<span id="cb20-59"><a href="#cb20-59" tabindex="-1"></a>         <span class="at">prod_w_new =</span> <span class="fu">case_when</span>(followup_time <span class="sc">==</span> <span class="dv">0</span> <span class="sc">~</span> <span class="dv">1</span>, <span class="co"># assuming no one is censored or non-adherent at baseline</span></span>
+<span id="cb20-60"><a href="#cb20-60" tabindex="-1"></a>                                <span class="cn">TRUE</span> <span class="sc">~</span> prod_w),</span>
+<span id="cb20-61"><a href="#cb20-61" tabindex="-1"></a>         <span class="at">cum_prod_w =</span> <span class="fu">cumprod</span>(prod_w_new))</span>
+<span id="cb20-62"><a href="#cb20-62" tabindex="-1"></a></span>
+<span id="cb20-63"><a href="#cb20-63" tabindex="-1"></a><span class="fu">View</span>(ctl_dat2[, <span class="fu">c</span>(<span class="st">&quot;id&quot;</span>, <span class="st">&quot;trial_period&quot;</span>, <span class="st">&quot;followup_time&quot;</span>, <span class="st">&quot;weight&quot;</span>, <span class="st">&quot;cum_prod_w&quot;</span>)])</span>
+<span id="cb20-64"><a href="#cb20-64" tabindex="-1"></a></span>
+<span id="cb20-65"><a href="#cb20-65" tabindex="-1"></a></span>
+<span id="cb20-66"><a href="#cb20-66" tabindex="-1"></a><span class="co"># for treatment arm </span></span>
+<span id="cb20-67"><a href="#cb20-67" tabindex="-1"></a>trt_dat <span class="ot">&lt;-</span> tmp_dat2 <span class="sc">%&gt;%</span></span>
+<span id="cb20-68"><a href="#cb20-68" tabindex="-1"></a>  <span class="fu">filter</span>(assigned_treatment <span class="sc">==</span> <span class="dv">1</span>)</span>
+<span id="cb20-69"><a href="#cb20-69" tabindex="-1"></a></span>
+<span id="cb20-70"><a href="#cb20-70" tabindex="-1"></a>weight_switch_d1 <span class="ot">&lt;-</span> <span class="fu">predict</span>(weight_model_switch_d1, <span class="at">newdata =</span> trt_dat, <span class="at">type =</span> <span class="st">&quot;response&quot;</span>)</span>
+<span id="cb20-71"><a href="#cb20-71" tabindex="-1"></a>weight_switch_n1 <span class="ot">&lt;-</span> <span class="fu">predict</span>(weight_model_switch_n1, <span class="at">newdata =</span> trt_dat, <span class="at">type =</span> <span class="st">&quot;response&quot;</span>)</span>
+<span id="cb20-72"><a href="#cb20-72" tabindex="-1"></a>switch_trt <span class="ot">&lt;-</span> weight_switch_n1<span class="sc">/</span>weight_switch_d1</span>
+<span id="cb20-73"><a href="#cb20-73" tabindex="-1"></a></span>
+<span id="cb20-74"><a href="#cb20-74" tabindex="-1"></a>cense_d1 <span class="ot">&lt;-</span> <span class="fu">predict</span>(cense_model_d1, <span class="at">newdata =</span> trt_dat, <span class="at">type =</span> <span class="st">&quot;response&quot;</span>)</span>
+<span id="cb20-75"><a href="#cb20-75" tabindex="-1"></a>cense_n1 <span class="ot">&lt;-</span> <span class="fu">predict</span>(cense_model_n1, <span class="at">newdata =</span> trt_dat, <span class="at">type =</span> <span class="st">&quot;response&quot;</span>)</span>
+<span id="cb20-76"><a href="#cb20-76" tabindex="-1"></a>cense_trt <span class="ot">&lt;-</span> cense_n1<span class="sc">/</span>cense_d1</span>
+<span id="cb20-77"><a href="#cb20-77" tabindex="-1"></a></span>
+<span id="cb20-78"><a href="#cb20-78" tabindex="-1"></a>trt_dat2 <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(trt_dat, switch_trt, cense_trt) <span class="sc">%&gt;%</span></span>
+<span id="cb20-79"><a href="#cb20-79" tabindex="-1"></a>  <span class="fu">group_by</span>(id, trial_period) <span class="sc">%&gt;%</span></span>
+<span id="cb20-80"><a href="#cb20-80" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">prod_w =</span> switch_trt<span class="sc">*</span>cense_trt,</span>
+<span id="cb20-81"><a href="#cb20-81" tabindex="-1"></a>         <span class="at">prod_w_new =</span> <span class="fu">case_when</span>(followup_time <span class="sc">==</span> <span class="dv">0</span> <span class="sc">~</span> <span class="dv">1</span>, </span>
+<span id="cb20-82"><a href="#cb20-82" tabindex="-1"></a>                                <span class="cn">TRUE</span> <span class="sc">~</span> prod_w),</span>
+<span id="cb20-83"><a href="#cb20-83" tabindex="-1"></a>         <span class="at">cum_prod_w =</span> <span class="fu">cumprod</span>(prod_w_new))</span>
+<span id="cb20-84"><a href="#cb20-84" tabindex="-1"></a></span>
+<span id="cb20-85"><a href="#cb20-85" tabindex="-1"></a><span class="fu">View</span>(trt_dat2[, <span class="fu">c</span>(<span class="st">&quot;id&quot;</span>, <span class="st">&quot;trial_period&quot;</span>, <span class="st">&quot;followup_time&quot;</span>, <span class="st">&quot;weight&quot;</span>, <span class="st">&quot;cum_prod_w&quot;</span>)])</span></code></pre></div>
+</div>
+<div id="inconsistent-component" class="section level1">
+<h1>inconsistent component</h1>
+<div class="sourceCode" id="cb21"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1" tabindex="-1"></a>ctl_dat3 <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(ctl_dat, switch_ctl, cense_ctl) <span class="sc">%&gt;%</span></span>
+<span id="cb21-2"><a href="#cb21-2" tabindex="-1"></a>  <span class="fu">group_by</span>(id, trial_period) <span class="sc">%&gt;%</span></span>
+<span id="cb21-3"><a href="#cb21-3" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">cense_ctl_new =</span> <span class="fu">case_when</span>(followup_time <span class="sc">==</span> <span class="fu">max</span>(followup_time) <span class="sc">~</span> <span class="dv">1</span>,</span>
+<span id="cb21-4"><a href="#cb21-4" tabindex="-1"></a>                                <span class="cn">TRUE</span> <span class="sc">~</span> cense_ctl),</span>
+<span id="cb21-5"><a href="#cb21-5" tabindex="-1"></a>         <span class="at">switch_ctl_new =</span> <span class="fu">case_when</span>(followup_time <span class="sc">==</span> <span class="dv">0</span> <span class="sc">~</span> <span class="dv">1</span>,</span>
+<span id="cb21-6"><a href="#cb21-6" tabindex="-1"></a>                                <span class="cn">TRUE</span> <span class="sc">~</span> switch_ctl),</span>
+<span id="cb21-7"><a href="#cb21-7" tabindex="-1"></a>         <span class="at">prod_w =</span> switch_ctl_new<span class="sc">*</span>cense_ctl_new,</span>
+<span id="cb21-8"><a href="#cb21-8" tabindex="-1"></a>         <span class="at">cum_prod_w =</span> <span class="fu">cumprod</span>(prod_w))</span>
+<span id="cb21-9"><a href="#cb21-9" tabindex="-1"></a></span>
+<span id="cb21-10"><a href="#cb21-10" tabindex="-1"></a><span class="fu">View</span>(ctl_dat3[, <span class="fu">c</span>(<span class="st">&quot;id&quot;</span>, <span class="st">&quot;trial_period&quot;</span>, <span class="st">&quot;followup_time&quot;</span>,<span class="st">&quot;cense_ctl&quot;</span>, <span class="st">&quot;cense_ctl_new&quot;</span>, <span class="st">&quot;switch_ctl&quot;</span>, <span class="st">&quot;switch_ctl_new&quot;</span>, <span class="st">&quot;weight&quot;</span>, <span class="st">&quot;cum_prod_w&quot;</span>)])</span></code></pre></div>
+<div id="refs" class="references csl-bib-body hanging-indent" entry-spacing="0">
+<div id="ref-Hernan2022-sp" class="csl-entry">
+Hernán, Miguel A, Wei Wang, and David E Leaf. 2022. <span>“Target Trial
+Emulation: A Framework for Causal Inference from Observational
+Data.”</span> <em>JAMA</em> 328 (24): 2446–47.
+</div>
+</div>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

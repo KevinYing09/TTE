@@ -1,0 +1,424 @@
+
+---
+title: "Target Trial Emulation"
+author: "Kevin Ying"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+bibliography: reference.bib  
+link-citations: yes
+objective: To apply the target trial emulation framework to create a analysis-ready data set
+vignette: >
+  %\VignetteIndexEntry{Target Trial Emulation}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+set.seed(2009)
+options(warn = -1)
+```
+Randomized controlled trials (RCTs) are the gold standard for evaluating medical interventions, but they are often impractical, slow, or costly. Modern causal inference methods, coupled with real-world data (RWD), provide a faster, well-powered alternative for estimating treatment effects across diverse patient populations.Despite this potential, several barriers hinder their effective use in translational research. A key challenge is aligning "time zero," the point at which a patient cohort is defined, eligibility, and treatment assignment, which leads to intractable bias. Other barriers include biases induced from data preprocessing, confounding, or strong modeling assumptions. Target trial emulation (TTE) is a major innovation that addresses these barriers by emulating RCT protocols using RWD [@Hernan2022-sp]. The TTE framework has proven especially useful in fostering improved communication between statisticians and clinicians to align sound study design, incisive data analysis and clinical insight to improve the quality of research (reference).
+This vignette aims to demonstrate the TTE framework using the TrialEmulation R package. We will use a simulated data set to illustrate how to create an analysis-ready data set for a target trial emulation. The data set is structured in a way that allows us to perform case I) intention-to-treat (ITT) and case II) per-protocol (PP) analyses, which are common in clinical trials.
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "C:\\Users\\u0399057\\Box\\Private\\Kevin Ying\\TTE vignette")
+```
+
+We use the example data from the TrialEmulation R package to do the demonstration. Below we load the needed R packages. 
+```{r echo=F}
+library(TrialEmulation)
+data(data_censored)
+```
+```{r}
+library(dplyr)
+library(lubridate)
+data_censored_temp <- data_censored %>%
+  group_by(id) %>%
+  filter(row_number()==1) %>%
+  select(id, treatment, x3, x4)
+```
+
+# Simualte the data for applying eligible criteria
+# Eligible criteria: 1) No dementia at and prior to time zero, 2) index window is 2000-2017 
+```{r}
+library(lubridate)
+set.seed(123) 
+tx_init_date <- sample(seq(as.Date('2000/01/01'), as.Date('2018/12/31'), by="day"), nrow(data_censored_temp))
+BL_dementia <- rep(0, nrow(data_censored_temp))
+BL_dementia[c(5, 20, 50)] <- 0
+data_censored_temp2 <-  data.frame(data_censored_temp, tx_init_date, BL_dementia)
+```
+
+# Simulate follow-up time and event indicator 
+# Outcomes of interest: 1) Dementia with death as the competing event, 2) all-cause mortality, 3) composite outcome of dementia and death 
+```{r}
+set.seed(123)
+# There are 5 possibilities in total when we consider a non-terminal outcome with death as the competing event
+#      dementia  death  loss-to-follow-up 
+#  1)      0       0       1
+#  2)      0       0       0   --> administratively censored 
+#  3)      1       1       0
+#  4)      1       0       0
+#  5)      0       1       0
+tmp2 <- data.frame(rbind(c(0,0,1), c(0,0,0), c(1,1,0), c(1,0,0), c(0,1,0)))
+names(tmp2) <- c("dementia", "death", "LTFU")
+event_inds <- cbind(tmp2, rep(row.names(tmp2), each = 18))
+event_inds <- event_inds[-1, 1:3]
+event_inds_final <- event_inds[sample(nrow(event_inds)),]
+
+# Add the corresponding event dates
+death_date <- sample(seq(as.Date('2000/02/01'), as.Date('2022/12/31'), by="day"), nrow(data_censored_temp2))
+dementia_date <- sample(seq(as.Date('2000/02/01'), as.Date('2022/12/31'), by="day"), nrow(data_censored_temp2))
+last_fu_date <- sample(seq(as.Date('2010/02/01'), as.Date('2022/12/31'), by="day"), nrow(data_censored_temp2))
+
+data_censored_temp3 <- data.frame(data_censored_temp2, event_inds_final, dementia_date, death_date, last_fu_date) 
+data_censored_simp0 <- data_censored_temp3 %>%
+  mutate(death_date = case_when(death==1 ~ death_date, 
+                                TRUE ~ NA),
+         dementia_date = case_when(dementia==1 ~ dementia_date, 
+                                   TRUE ~ NA),
+         last_fu_date = case_when(dementia==0 & death == 0 & LTFU == 0 ~ as.Date('2022/12/31'),
+                                  dementia==1 & death == 1 & LTFU == 0 ~ death_date,
+                                  dementia==1 & death == 0 & LTFU == 0 ~ last_fu_date,
+                                  dementia==0 & death == 1 & LTFU == 0 ~ death_date,
+                                  TRUE ~ last_fu_date),
+         dementia = case_when(is.na(death_date)==FALSE & is.na(dementia_date)==FALSE & dementia_date > min(death_date, last_fu_date) ~ 0,
+                              is.na(death_date)==TRUE & is.na(dementia_date)==FALSE & dementia_date > last_fu_date ~ 0,
+                              TRUE ~ dementia),
+         death = case_when(is.na(death_date)==FALSE & death_date > last_fu_date ~ 0, 
+                           TRUE ~ death),
+         LTFU = case_when(dementia==0 & death == 0 & last_fu_date < as.Date('2022/12/31') ~ 1, 
+                          TRUE ~ 0))
+```
+
+# Case I: A new-user, active comparator design; Intention-to-treat analysis
+As the first step, we process the data to create an analysis-ready data set for a target trial emulation. The data set is in one-patient-per-row format and should include the following variables:
+
+1. An indicator that indicates if the subject satisfies the eligibility criteria. 
+2. The data set contains the treatment variable that clearly groups individuals into different treatments they are assigned to.
+3. Baseline covariates (time-invariant) that are selected based on domain knowledge and may confound the treatment-outcome relationship.
+4. A follow-up time variable that starts from a clearly defined time zero.
+5. An event indicator and the time to the event  
+
+At the second step, we remove subjects who are not eligible. In this example case, our eligible criteria are: 1) No dementia at and prior to time zero, 2) index window is 2000-2017. We exclude subjects who do not meet these criteria.
+```{r}
+data_censored_simp0 <- readRDS("./data_censored_simp4.rds")
+View(data_censored_simp0)
+# id --> patient identifier
+# treatment --> indicator for receiving treatment in this period, 1=treatment, 0=non-treatment
+# x3 --> A fixed categorical variable relating to treatment and the outcome
+# x4 --> A fixed categorical variable relating to treatment and the outcome 
+
+# Create a flag for eligibility
+data_censored_simp1 <- data_censored_simp0 %>%
+  mutate(eligible = ifelse(year(tx_init_date) <= 2017 & BL_dementia == 0, 1, 0))
+
+# How many subjects are eligible?
+table(data_censored_simp1$eligible)
+
+# Remove ineligible subjects
+data_censored_simp4 <- data_censored_simp1 %>% 
+  filter(eligible == 1)
+```
+
+# Create the outcomes of interest: 
+# 1) Dementia with death as the competing event
+# 2) all-cause mortality
+# 3) composite outcome of dementia and death
+
+# There are 5 possibilities when we consider a non-terminal outcome with death as the competing event
+#      dementia  death  loss-to-follow-up 
+#  1)      0       0       1
+#  2)      0       0       0   --> administratively censored 
+#  3)      1       1       0
+#  4)      1       0       0
+#  5)      0       1       0
+```{r}
+# Create all-cause death outcome and (intermediate) dementia outcome
+data_censored_simp5 <- data_censored_simp4 %>%
+  mutate(ad_censor_days = as.numeric(as.Date("2022-12-31")-tx_init_date),
+         
+         death_days0 = ifelse(is.na(death_date)==FALSE, as.numeric(death_date-tx_init_date),  as.numeric(last_fu_date-tx_init_date)),
+         death_days = pmin(death_days0, ad_censor_days),
+         death = ifelse(death_days0 <= ad_censor_days & death==1, 1, 0),
+         
+         dementia_days0 = ifelse(is.na(dementia_date)==FALSE, as.numeric(dementia_date-tx_init_date), as.numeric(last_fu_date-tx_init_date)),
+         dementia_days = pmin(dementia_days0, ad_censor_days),
+         dementia = ifelse(dementia_days0 <= ad_censor_days & dementia==1, 1, 0))
+
+# In real data, need to check if any dementia event occurs after the end of follow-up or death
+
+# Create composite outcome and final dementia outcome with competing event of death
+data_censored_simp6 <- data_censored_simp5 %>%
+  mutate(death_dementia = ifelse(death==1|dementia==1, 1, 0),
+         death_dementia_days = ifelse(death==1 & dementia==0, death_days, 
+                                      ifelse(death==0 & dementia==1, dementia_days, pmin(dementia_days, death_days))),
+         
+         dementia_compete_death = ifelse(dementia==1, 1,
+                                     ifelse(death==1, 2, 0)),
+         dementia_compete_death_days = death_dementia_days)
+
+```
+
+# Save the clean data for downstream analyses 
+```{r}
+data_censored_simp_ITT <- data_censored_simp6 %>%
+  dplyr::select(id, treatment, x3, x4, 
+                death, death_days, death_dementia, death_dementia_days,
+                dementia_compete_death, dementia_compete_death_days) 
+saveRDS(data_censored_simp_ITT, file="./data_censored_simp_ITT.rds") 
+```
+
+
+
+
+## Case II: A new-user, active comparator design; Per-protocol analysis
+
+Data structure: person-time long format 
+```{r}
+library(TrialEmulation)
+data(data_censored) 
+
+data_censored_simp_PP <- data_censored %>%
+  mutate(period = period + 1,
+         age = case_when(period==1 ~ age*12,
+                         TRUE ~ age*12-11*(period-1))) %>%
+  rename(month = period, event = outcome, LTFU = censored) %>%
+  select(-c(age_s, eligible)) 
+
+View(data_censored_simp_PP)
+# id patient identifier
+# month time period
+# treatment indicator for receiving treatment in this period, 1=treatment, 0=non-treatment
+# x1 A time-varying categorical variable relating to treatment and the outcome
+# x2 A time-varying numeric variable relating to treatment and the outcome
+# x3 A fixed categorical variable relating to treatment and the outcome
+# x4 A fixed categorical variable relating to treatment and the outcome
+# age patient age in months
+# event event indicator 
+# LTFU censoring indicator
+
+# Issues in real data: 
+# 1. Missing data in time-varying covariates
+# 2. Missing entire visit months --> aggregate data: 3- or 6-month intervals 
+```
+
+# Create treatment adherence variable
+# Consider a strict protocol of 1) adhering to initial treatment every month, 2) no contraindication is allowed
+```{r}
+tmp <- data_censored_simp_PP %>%
+  group_by(id) %>%
+  filter(row_number()==1) %>%
+  rename(tx0 = treatment) %>%
+  select(id, tx0)
+  
+data_censored_simp_PP2 <- data_censored_simp_PP %>% left_join(tmp, by = "id")
+data_censored_simp_PP3 <- data_censored_simp_PP2 %>%
+  mutate(adherence = ifelse(treatment == tx0, 1, 0))
+View(data_censored_simp_PP3)
+```
+
+# Create artifically censored variable --> assume monotone censoring
+# remove the rows of data after deviating from the protocol
+```{r}
+data_censored_simp_PP4 <- data_censored_simp_PP3 %>%
+  mutate(art_censored = 1-adherence)
+  
+data_censored_simp_PP5  <- data_censored_simp_PP4 %>% 
+  group_by(id) %>% 
+  mutate(cum_art_censored = cumsum(art_censored)) %>% 
+  filter(cum_art_censored %in% c(0,1)) %>% # We keep the row of being artificially censored for estimating the adherence probabilities 
+  select(-cum_art_censored)
+
+View(data_censored_simp_PP5)
+```
+
+## Case III: A new-user, placebo control design; Intention-to-treat analysis (TrialEmulation)
+
+Data structure: person-trial long format 
+```{r}
+library(TrialEmulation)
+data(data_censored)
+View(data_censored)
+# age_s standardized patient age
+
+# Expand data using data_preparation 
+# Assume random/independent censoring 
+data_censored_ITT <- data_preparation(data_censored, estimand_type = "ITT", outcome_cov = ~x1+x2+x3+x4+age_s)
+data_censored_ITT$min_period
+data_censored_ITT$max_period # A sequence of 20 trials
+
+# total number of subjects in the expanded data 
+data_censored_ITT$N
+
+# expanded data 
+data_censored_ITT_dat <- data_censored_ITT$data
+View(data_censored_ITT_dat)
+
+data_censored_ITT_dat_id2 <- data_censored_ITT_dat %>% 
+  filter(id == 2) %>%
+  arrange(id, trial_period, followup_time)
+View(data_censored_ITT_dat_id2)
+
+data_censored_ITT_dat_id4 <- data_censored_ITT_dat %>% 
+  filter(id == 4) %>%
+  arrange(id, trial_period, followup_time)
+View(data_censored_ITT_dat_id4)
+```
+
+# Explore dependent censoring
+```{r}
+data_censored_ITT2 <- data_preparation(data_censored, estimand_type = "ITT", outcome_cov = ~x1+x2+x3+x4+age_s,
+                                       use_censor_weights = TRUE, cense = "censored", 
+                                       cense_d_cov = ~ x1 + x2 + x3 + x4 + age_s, cense_n_cov = ~ x3 + x4,
+                                       pool_cense = "numerator", # does not allow the numerator model to be fitted separately for the treatment groups
+                                       glm_function = "parglm", nthreads = 4, method = "FAST", quiet = TRUE)
+
+data_censored_ITT2$censor_models
+```
+
+# Case IV: A new-user, placebo control design; Per-protocol analysis
+
+Data structure: person-trial-time long format 
+```{r}
+library(TrialEmulation)
+data(data_censored)
+View(data_censored)
+
+# Expand data using data_preparation 
+data_censored_PP <- data_preparation(data_censored, estimand_type = "PP", outcome_cov = ~x1+x2+x3+x4+age_s,
+                                     switch_d_cov = ~ x1 + x2 + x3 + x4 + age_s + time_on_regime + I(time_on_regime^2),
+                                     switch_n_cov = ~ x3 + x4 + time_on_regime + I(time_on_regime^2),
+                                     use_censor_weights = TRUE, cense = "censored", 
+                                     cense_d_cov = ~ x1 + x2 + x3 + x4 + age_s, cense_n_cov = ~ x3 + x4,
+                                     pool_cense = "none", 
+                                     glm_function = "parglm", nthreads = 4, method = "FAST", quiet = TRUE)
+data_censored_PP$min_period
+data_censored_PP$max_period # A sequence of 19 trials
+
+# total number of subjects in the expanded data 
+data_censored_PP$N  
+
+# expanded data 
+data_censored_PP_dat <- data_censored_PP$data
+
+data_censored_PP_dat_id2 <- data_censored_PP_dat %>% 
+  filter(id == 2)
+View(data_censored_PP_dat_id2)
+
+data_censored_PP_dat_id4 <- data_censored_PP_dat %>% 
+  filter(id == 4) %>%
+  arrange(id, trial_period, followup_time)
+View(data_censored_PP_dat_id4)
+```
+
+# Explore the censoring and treatment models
+```{r}
+working_dir <- "C:/Users/u0399057/Box/Private/Kevin Ying/TTE vignette"
+data_censored_PP <- data_preparation(data_censored, estimand_type = "PP", outcome_cov = ~x1+x2+x3+x4+age_s,
+                                     switch_d_cov = ~ x1 + x2 + x3 + x4 + age_s + time_on_regime + I(time_on_regime^2),
+                                     switch_n_cov = ~ x3 + x4 + time_on_regime + I(time_on_regime^2),
+                                     use_censor_weights = TRUE, cense = "censored", 
+                                     cense_d_cov = ~ x1 + x2 + x3 + x4 + age_s, cense_n_cov = ~ x3 + x4,
+                                     pool_cense = "none", 
+                                     data_dir = working_dir, save_weight_models = TRUE,
+                                     glm_function = "parglm", nthreads = 4, method = "FAST", quiet = TRUE)
+# View(data_censored_PP$data)
+# Note only baseline values of the time-varying variables are kept in the data set for downstream marginal structural models 
+# The row of being artificially censored are not included 
+
+# load the saved models 
+weight_model_switch_d0 <- readRDS("weight_model_switch_d0.rds")
+weight_model_switch_d1 <- readRDS("weight_model_switch_d1.rds")
+weight_model_switch_n0 <- readRDS("weight_model_switch_n0.rds")
+weight_model_switch_n1 <- readRDS("weight_model_switch_n1.rds")
+
+cense_model_d0 <- readRDS("cense_model_d0.rds")
+cense_model_d1 <- readRDS("cense_model_d1.rds")
+cense_model_n0 <- readRDS("cense_model_n0.rds")
+cense_model_n1 <- readRDS("cense_model_n1.rds")
+
+# Prepare the data set for making predictions --> only looking at trial period zero for now 
+tmp_dat <- data_censored_PP$data %>%
+  group_by(id, trial_period) %>%
+  mutate(adherence = ifelse(treatment == assigned_treatment, 1, 0), # in the cleaned PP data set, this adherence = 1 everywhere
+         time_on_regime = cumsum(adherence)-1,  # -1 to not account the one at baseline 
+         followup_time2 = followup_time+trial_period) %>%
+  select(-c(x1, x2, age_s)) %>% 
+  filter(trial_period == 0)
+
+data_censored_tmp <- data_censored %>%
+  rename(followup_time2 = period) %>%
+  select(id, followup_time2, x1, x2, age_s)
+
+tmp_dat2 <- tmp_dat %>% 
+  left_join(data_censored_tmp, by=c("id", "followup_time2"))%>%
+  arrange(id, trial_period, followup_time)
+
+
+# for control arm
+ctl_dat <- tmp_dat2 %>%
+  filter(assigned_treatment == 0)
+
+# probabilities of receiving treatment = 1 at each month 
+weight_switch_d0 <- predict(weight_model_switch_d0, newdata = ctl_dat, type = "response")
+weight_switch_n0 <- predict(weight_model_switch_n0, newdata = ctl_dat, type = "response")
+switch_ctl <- (1-weight_switch_n0)/(1-weight_switch_d0) # 1-prob(tx = 1) = prob(tx = 0)
+
+cense_d0 <- predict(cense_model_d0, newdata = ctl_dat, type = "response")
+cense_n0 <- predict(cense_model_n0, newdata = ctl_dat, type = "response")
+cense_ctl <- cense_n0/cense_d0
+
+ctl_dat2 <- data.frame(ctl_dat, switch_ctl, cense_ctl) %>%
+  group_by(id, trial_period) %>%
+  mutate(prod_w = switch_ctl*cense_ctl,
+         prod_w_new = case_when(followup_time == 0 ~ 1, # assuming no one is censored or non-adherent at baseline
+                                TRUE ~ prod_w),
+         cum_prod_w = cumprod(prod_w_new))
+
+View(ctl_dat2[, c("id", "trial_period", "followup_time", "weight", "cum_prod_w")])
+
+
+# for treatment arm 
+trt_dat <- tmp_dat2 %>%
+  filter(assigned_treatment == 1)
+
+weight_switch_d1 <- predict(weight_model_switch_d1, newdata = trt_dat, type = "response")
+weight_switch_n1 <- predict(weight_model_switch_n1, newdata = trt_dat, type = "response")
+switch_trt <- weight_switch_n1/weight_switch_d1
+
+cense_d1 <- predict(cense_model_d1, newdata = trt_dat, type = "response")
+cense_n1 <- predict(cense_model_n1, newdata = trt_dat, type = "response")
+cense_trt <- cense_n1/cense_d1
+
+trt_dat2 <- data.frame(trt_dat, switch_trt, cense_trt) %>%
+  group_by(id, trial_period) %>%
+  mutate(prod_w = switch_trt*cense_trt,
+         prod_w_new = case_when(followup_time == 0 ~ 1, 
+                                TRUE ~ prod_w),
+         cum_prod_w = cumprod(prod_w_new))
+
+View(trt_dat2[, c("id", "trial_period", "followup_time", "weight", "cum_prod_w")])
+```
+
+
+
+
+# inconsistent component 
+```{r}
+ctl_dat3 <- data.frame(ctl_dat, switch_ctl, cense_ctl) %>%
+  group_by(id, trial_period) %>%
+  mutate(cense_ctl_new = case_when(followup_time == max(followup_time) ~ 1,
+                                TRUE ~ cense_ctl),
+         switch_ctl_new = case_when(followup_time == 0 ~ 1,
+                                TRUE ~ switch_ctl),
+         prod_w = switch_ctl_new*cense_ctl_new,
+         cum_prod_w = cumprod(prod_w))
+
+View(ctl_dat3[, c("id", "trial_period", "followup_time","cense_ctl", "cense_ctl_new", "switch_ctl", "switch_ctl_new", "weight", "cum_prod_w")])
+```
+
