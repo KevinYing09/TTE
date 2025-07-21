@@ -1,0 +1,233 @@
+---
+title: "A new-user, active comparator design; Intention-to-treat analysis"
+author: "Kevin Ying, Peirong Hao, Yizhe Xu"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+bibliography: reference.bib  
+link-citations: yes
+objective: To apply the target trial emulation framework to create a analysis-ready data set
+vignette: >
+  %\VignetteIndexEntry{Target Trial Emulation}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+```{r}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+set.seed(2009)
+options(warn = -1)
+```
+
+
+# Introduction
+##Peirong, add an introduction to A new-user, active comparator design; Intention-to-treat analysis
+
+# Load packages
+```{r, message = FALSE, warning = FALSE}
+library(TrialEmulation)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(survival)
+library(survminer)
+library(lubridate)
+source("R/generate observed data.R")
+```
+Simulate data
+```{r}
+# Set seed
+set.seed(412)
+#simulate data
+simdata0=generate.obs.data(n=1000,J=20,beta0.trt0=1,beta.adherence=2, beta0.outcome=-5, beta.trt.effect=-1.2, beta0.censoring=-1)
+simdata=simdata0%>%select(id, time, X1, X2, X3, X4, age, A, Y, C) 
+```
+Now we start to create a analysis-ready from the simulated data. We will emulate a randomized clinic trial described below. 
+Add a table here to describe the trial design. 
+
+First, we create an eligible indicator. Our inclusion criteria are: 1)age >=50, 2)no history of Y by current time, and 3)no treatment in previous 2 years of current time
+```{r}
+simdata <- simdata %>%
+  group_by(id) %>%
+  mutate(eligible = as.integer(age >= 50 & cumsum(Y) == 0 & (lag(A)+lag(A,2)) == 0)) %>%
+  ungroup()
+```
+Let's take a look on a sample. 
+```{r}
+simdata%>%filter(id==2)
+
+```
+We can see that:  
+At time 0 through 6, his age is below 50 and so e is not eligible for the study.
+At time 7 through 9, his age is over 50 and he has no history of Y but he has treatment within previous 2 years, so he is not eligible.
+At time 10 through 13, his age is 50 and he has no history of Y and no treatment in previous 2 years, so he is eligible.
+At time 14 and after, he has treatment in previous 2 years, so he is not eligible.
+Now we identify the subjects who are eligible ever and the first time they are eligible
+```{r}
+eligible_info <- simdata %>%
+  group_by(id) %>%
+  summarise(first_eligible_time = min(time[eligible == 1], na.rm = TRUE),
+            ever_eligible = any(eligible == 1)) %>%
+  ungroup()
+```
+How many ever eligible? 
+```{r}
+table(eligible_info$ever_eligible)
+```
+Check a few of them. 
+```{r}
+eligible_info %>% filter(id %in% 1:3)
+```
+As we explained above, subject 2 is first eligible at time 10. And we can also see that subject 1 and 3 are never eligible. 
+
+Now merge the information
+```{r}
+simdata <- simdata %>%
+  left_join(eligible_info, by = "id") 
+```
+
+now we are ready to do the analysis
+We will perform intention-to-treatment (ITT) analysis and per-protocol (PP) analysis.
+Explain ITT and PP here. 
+#Case I:  A new-user, active comparator design; Intention-to-treat analysis
+ 
+Subjects become eligible at multiple times. One option is just use the first time they are eligible. Below we prepare the data for analysis using this option.
+In this option, we start follow up from the first eligible time
+Select the eligible subjects and keep rows at and after first eligible time.
+```{r}
+simdata1 <- simdata %>%
+  filter(time >= first_eligible_time) %>%
+  select(-ever_eligible)
+simdata.one.trial <- simdata1 %>%
+  mutate(follow_up = time - first_eligible_time) %>%
+  select(-first_eligible_time, -eligible) 
+baseline=simdata.one.trial %>%filter(follow_up==0) %>%
+  select(id, A, X1, X2, X3, X4, age) %>%
+  rename(assigned_treatment = A, X1_0 = X1, X2_0 = X2, X3_0 = X3, X4_0 = X4, age_0 = age) 
+simdata.one.trial=simdata.one.trial %>%
+  left_join(baseline, by = "id") %>%
+  arrange(id, follow_up)
+
+```
+This data is ready for ITT analysis.
+
+To perform appropriate analysis we should take into consideration the censoring mechanism and the treatment assignment mechanism. Bellow are 4 different situations determined by the two mechanisms. 
+1) treatment assignment can be seems random and censoring is non-informative.## Add example here.##. In this situation, a standard ITT analysis can be performed.
+2) treatment assignment is not random and censoring is non-informative. ## Add example here.##. In this situation, we need to adjust the bias caused by confounding. We can use propensity score weighting or regression with confounding variable added as covariates to adjust the bias.
+3) treatment assignment is random and censoring is informative. ## Add example here.##. In this situation, we can use inverse probability of censoring weighting (IPCW) to adjust the bias caused by informative censoring.
+4) treatment assignment is not random and censoring is informative. ## Add example here.##. In this situation, we need to adjust the bias caused by confounding and informative censoring. We can use a combination of propensity score weighting of treatment and censoring to adjust the bias.
+
+Below we demonstrate the analysis under each of the 4 situations.
+
+#Situdation 1: treatment assignment can be seems random and censoring is non-informative.
+We can do a Cox regression in this situation. 
+We first convert the long format data (multiple rows per subject) to short format data (one row per subject). We keep the baseline values and the follow-up time and status
+```{r}
+#event time of subjects with event or censored
+ event.cens.time= simdata.one.trial %>%filter(Y==1 | C==1) %>%
+  group_by(id) %>%
+  summarise(
+    follow_up = min(follow_up, na.rm = TRUE),
+ 
+  ) %>%
+  ungroup()
+event.cens.time=event.cens.time%>%left_join(simdata.one.trial)%>%
+  select(id, assigned_treatment,X1_0, X2_0, X3_0, X4_0, age_0, follow_up, Y, C )%>%mutate(
+    outcome = ifelse(Y == 1 & C==0, 1, 0) 
+  ) 
+#follow-up time of other subjects
+event.cens.time0=simdata.one.trial %>%filter(!id%in%event.cens.time$id) %>%
+  group_by(id) %>%
+  summarise(
+    follow_up = max(follow_up, na.rm = TRUE)
+  ) %>%
+  ungroup() %>%mutate(
+    outcome = 0
+  ) 
+event.cens.time0=event.cens.time0%>%left_join(simdata.one.trial)%>%
+  select(id, assigned_treatment,X1_0, X2_0, X3_0, X4_0, age_0, follow_up, outcome)
+#combine the two data sets
+simdata.short <- bind_rows(event.cens.time, event.cens.time0) %>%
+  arrange(id)
+#check if all subjects are included
+setequal(unique(simdata.one.trial$id), unique(simdata.short$id))
+
+```
+Now we simply perform a Cox regression
+```{r}
+cox_model <- coxph(Surv(follow_up, outcome) ~ assigned_treatment, data = simdata.short)
+summary(cox_model)
+```
+#situation 2: treatment assignment is not random and censoring is non-informative.
+We can use propensity score weighting to adjust the bias caused by confounding. We can use the data we prepared above to do this analysis.
+```{r}
+# Fit a logistic regression model to estimate the propensity scores
+ps_model <- glm(assigned_treatment ~ X1_0 + X2_0 + X3_0 + X4_0 + age_0, 
+                 data = simdata.short, 
+                 family = binomial)
+# Calculate the propensity scores
+p=predict(ps_model, type = "response")
+# Calculate the inverse probability of treatment weights
+simdata.short=simdata.short%>%mutate(weight=if_else(assigned_treatment==1, 1/p, 1/(1-p)))
+#check overlapping of the weight
+simdata.short%>%ggplot(aes(x=weight, fill=as.factor(assigned_treatment))) +
+  geom_histogram(position="identity", alpha=0.5, bins=30) +
+  labs(title="Distribution of Weights by Treatment Group", x="Weight", y="Count") +
+  scale_fill_discrete(name="Treatment Group") +
+  theme_minimal()
+#truncate the weight at 97.5th percentile
+simdata.short <- simdata.short %>%
+  mutate(weight = ifelse(weight > quantile(weight, 0.975), quantile(weight, 0.975), weight))
+###here to add code to check banalce of the covariates
+
+#run a weighted cox regression
+weighted_cox_model <- coxph(Surv(follow_up, outcome) ~ assigned_treatment, 
+                             data = simdata.short, 
+                             weights = weight)
+summary(weighted_cox_model)
+```
+#situation 3: treatment assignment is random and censoring is informative.
+We can use inverse probability of censoring weighting (IPCW) to adjust the bias caused by informative censoring. 
+
+```{r}
+# Fit a logistic regression model to estimate the censoring probabilities
+censor_model <- glm(C ~ assigned_treatment + X1_0 + X2_0 + X3_0 + X4_0 + age_0, 
+                     data = simdata.one.trial, 
+                     family = binomial)
+# Calculate the censoring probabilities
+censor_probs <- predict(censor_model, type = "response")
+# Calculate the inverse probability of censoring weights
+simdata.one.trial <- simdata.one.trial %>%
+  mutate(censor_weight = ifelse(C == 1, 1 / censor_probs, 1 / (1 - censor_probs)))
+#check overlapping of the weight
+simdata.one.trial %>%
+  ggplot(aes(x = censor_weight, fill = as.factor(assigned_treatment))) +
+  geom_histogram(position = "identity", alpha = 0.5, bins = 30) +
+  labs(title = "Distribution of Censoring Weights by Treatment Group", 
+       x = "Censoring Weight", y = "Count") +
+  scale_fill_discrete(name = "Treatment Group") +
+  theme_minimal()
+# Truncate the censoring weights at the 97.5th percentile
+simdata.one.trial <- simdata.one.trial %>%
+  mutate(censor_weight = ifelse(censor_weight > quantile(censor_weight, 0.975), 
+                                quantile(censor_weight, 0.975), censor_weight))
+###here to add code to check balance of the covariates
+# Run a weighted pooled logistic regression
+weighted_ipcw_model <- glm(Y ~ assigned_treatment+follow_up+follow_up^2, 
+                             data = simdata.one.trial%>%filter(C!=0), #In an time interval, we consider censoring first. If censoring happens, then we don't kow the outcome. 
+                             weights = censor_weight, 
+                             family = binomial)
+summary(weighted_ipcw_model)
+
+
+```
+situation 4: treatment assignment is not random and censoring is informative.
+We can use a combination of propensity score weighting of treatment and censoring to adjust the bias.We can use the weight we calculated in situation 2 and 3 for this analysis
+```{r}
+simdata.one.trial=simdata.one.trial%>%left_join(simdata.short%>%select(id, weight)%>%rename(trt.weight=weight))%>%mutate(weight.TC=trt.weight*censor_weight)
+weighted_iptw_ipcw_model <- glm(Y ~ assigned_treatment+follow_up+follow_up^2, 
+                             data = simdata.one.trial%>%filter(C!=0), #In an time interval, we consider censoring first. If censoring happens, then we don't kow the outcome. 
+                             weights = weight.TC, 
+                             family = binomial)
+summary(weighted_iptw_ipcw_model)
