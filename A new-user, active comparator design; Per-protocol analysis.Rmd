@@ -1,0 +1,185 @@
+---
+title: "A new-user, active comparator design; Per-protocol analysis"
+author: "Kevin Ying,Peirong Hao,Yizhe Xu"
+date: "2025-07-21"
+output: html_document
+---
+
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+bibliography: reference.bib  
+link-citations: yes
+objective: To apply the target trial emulation framework to create a analysis-ready data set
+vignette: >
+  %\VignetteIndexEntry{Target Trial Emulation}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+```{r}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+set.seed(2009)
+options(warn = -1)
+```
+
+Per-protocol (PP) analysis is a method used in the statistical evaluation of clinical trials to assess the effect of an intervention under ideal conditions. Unlike the intention-to-treat (ITT) approach, which includes all randomized participants regardless of adherence, PP analysis includes only those participants who fully comply with the trial protocol. This typically means excluding individuals who did not receive the assigned intervention, who withdrew early, or who deviated significantly from study procedures.
+
+The primary objective of per-protocol analysis is to estimate the efficacy of a treatment—how well it works when taken exactly as intended. While this can offer valuable insight into the potential benefits of an intervention, it may also introduce bias due to the non-random exclusion of participants. Therefore, PP analysis is often used as a complement to ITT analysis rather than a replacement, helping to provide a more nuanced understanding of treatment effects.
+
+In regulatory and clinical decision-making contexts, per-protocol analysis can be particularly relevant when determining the maximum achievable benefit of a treatment under optimal adherence conditions. However, careful consideration must be given to its limitations, especially in terms of generalizability and internal validity.
+
+In this vignette, we will simulate a data set that mimic the hospital record and then create a analysis-ready data set for a per-protocol analysis.
+The targeted trial we will emulate is a randomized clinical trial described below:
+1. Treatment:comparing an active treatment (A=1) with a placebo (A=0)
+2. The eligibility criteria are: 1) age >= 50, 2) no history of outcome Y by current time, and 3) no treatment in previous 2 years of current time.
+3. The primary outcome is time to outcome Y.
+4. The analysis will be a per-protocol analysis.
+
+# Load packages
+```{r, message = FALSE, warning = FALSE}
+library(TrialEmulation)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(survival)
+library(survminer)
+library(lubridate)
+source("R/generate observed data version 0.R")
+```
+Simulate data
+```{r}
+# Set seed
+set.seed(412)
+#simulate data
+simdata=generate.obs.data(n=10000,J=20,beta0.trt0=1,beta.adherence=2, beta0.outcome=-5, beta.trt.effect=-1.2, beta0.censoring=-1)
+```
+Now we start to create a analysis-ready from the simulated data. We will emulate a randomized clinic trial described below. 
+Add a table here to describe the trial design. 
+
+First, we create an eligible indicator. Our inclusion criteria are: 1)age >=50, 2)no history of Y by current time, and 3)no treatment in previous 2 years of current time
+```{r}
+simdata <- simdata %>%
+  group_by(id) %>%
+  mutate(eligible = as.integer(age >= 50 & cumsum(Y) == 0 & (lag(A)+lag(A,2)) == 0)) %>%
+  ungroup()
+```
+Let's take a look on a sample. 
+```{r}
+simdata%>%filter(id==2)
+
+```
+We can see that:  
+At time 0 through 6, his age is below 50 and so e is not eligible for the study.
+At time 7 through 9, his age is over 50 and he has no history of Y but he has treatment within previous 2 years, so he is not eligible.
+At time 10 through 13, his age is 50 and he has no history of Y and no treatment in previous 2 years, so he is eligible.
+At time 14 and after, he has treatment in previous 2 years, so he is not eligible.
+Now we identify the subjects who are eligible ever and the first time they are eligible
+```{r}
+eligible_info <- simdata %>%
+  group_by(id) %>%
+  summarise(first_eligible_time = min(time[eligible == 1], na.rm = TRUE),
+            ever_eligible = any(eligible == 1)) %>%
+  ungroup()
+```
+How many ever eligible? 
+```{r}
+table(eligible_info$ever_eligible)
+```
+Check a few of them. 
+```{r}
+eligible_info %>% filter(id %in% 1:3)
+```
+As we explained above, subject 2 is first eligible at time 10. And we can also see that subject 1 and 3 are never eligible. 
+
+Now merge the information
+```{r}
+simdata <- simdata %>%
+  left_join(eligible_info, by = "id") 
+```
+Now, we enroll those eligible subjects and starts the follow-up from the first time they are eligible.
+```{r}
+workdata <- simdata %>%filter(ever_eligible==1 & time>=first_eligible_time) %>%
+  group_by(id) %>%
+  mutate(followup_time = time - first_eligible_time) %>%
+  ungroup() %>%
+  select(id, time, X1, X2, X3, X4, age, A, Y, C, followup_time)
+```
+now we are ready to do the analysis
+We will perform per protocol (PP) analysis  
+We first create artificial censoring that is defined as deviation from the assigned treatment. And the data after artificial censoring is dropped.
+```{r}
+assigned.trt=workdata%>%filter(followup_time==0)%>%rename(assigned.trt=A)%>%select(id, assigned.trt)
+workdata=workdata%>%left_join(assigned.trt)
+workdata=workdata%>% mutate(adherence = ifelse(A == assigned.trt, 1, 0),
+                            art_censored=1-adherence)
+
+ workdata=workdata%>% 
+  group_by(id) %>% 
+  mutate(cum_art_censored = cumsum(art_censored)) %>% 
+  filter(cum_art_censored %in% c(0,1)) %>% 
+  select(-cum_art_censored)
+
+```
+Now we calculate treatment weight, censoring weight and adherence weights. We will use stabilized weights so for each weight we will fit a numerator model and a denominator model. For adherence weight, we will fit a model for the numerator and for denominator for each treatment arm. For censoring weight, we will fit a model for the numerator model for each treatment arm and pool the denominator across all subjects. ????Need to explain why???
+```{r}
+# Fit models for treatment, adherence, and censoring weights
+baseline=workdata%>%filter(followup_time==0)
+trt.model=glm(assigned.trt ~ X1 + X2 + X3 + X4 + age,
+                  data = baseline,
+                  family = binomial(link = "logit"))
+
+adh.model.d0=glm(adherence ~ X1 + X2 + X3 + X4 + age + followup_time + I(followup_time^2),
+                  data = workdata %>% filter(assigned.trt == 0),
+                  family = binomial(link = "logit"))
+adh.model.d1=glm(adherence ~ X1 + X2 + X3 + X4 + age + followup_time + I(followup_time^2),
+                  data = workdata %>% filter(assigned.trt == 1),
+                  family = binomial(link = "logit"))
+adh.model.n0=glm(adherence ~  X3 + X4 + followup_time + I(followup_time^2),
+                  data = workdata %>% filter(assigned.trt == 0),
+                  family = binomial(link = "logit"))
+adh.model.n1= glm(adherence ~  X3 + X4 + followup_time + I(followup_time^2),
+                  data = workdata %>% filter(assigned.trt == 1),
+                  family = binomial(link = "logit"))
+cens.model.d0=glm(C~ X1 + X2 + X3 + X4 + age,
+                  data = workdata %>% filter(assigned.trt == 0),
+                  family = binomial(link = "logit"))
+cens.model.d1=glm(C~ X1 + X2 + X3 + X4 + age,
+                  data = workdata %>% filter(assigned.trt == 1),
+                  family = binomial(link = "logit"))
+cens.model.n=glm(C ~ X3 + X4,
+                  data = workdata,
+                  family = binomial(link = "logit"))
+```
+Now we calculate the weights
+```{r}
+#treatment weight
+ baseline=baseline%>%mutate(trt.weight=if_else(assigned.trt==1, 1/predict(trt.model, type = "response"), 1/(1-predict(trt.model, type = "response"))))
+
+#adherence and censoring weights
+workdata0 <- workdata %>%filter(assigned.trt == 0)%>%ungroup()
+ workdata0 <- workdata0 %>% mutate(
+    adh_weight_d = predict(adh.model.d0, type = "response",newdata=workdata0) / predict(adh.model.n0, type = "response",newdata=workdata0),
+    cens_weight_d = predict(cens.model.d0, type = "response",newdata=workdata0) / predict(cens.model.n, type = "response",newdata=workdata0)
+  )%>%mutate(weight0=if_else(followup_time==0,1, adh_weight_d*cens_weight_d))%>%group_by(id)%>%mutate(weight=cumprod(weight0))%>%ungroup()
+workdata1 <- workdata %>%filter(assigned.trt == 1)%>%ungroup()
+workdata1 <- workdata1 %>% mutate(
+    adh_weight_d = predict(adh.model.d1, type = "response",newdata=workdata1) / predict(adh.model.n1, type = "response",newdata=workdata1),
+    cens_weight_d = predict(cens.model.d1, type = "response",newdata=workdata1) / predict(cens.model.n, type = "response",newdata=workdata1)
+  )%>%mutate(weight0=if_else(followup_time==0,1, adh_weight_d*cens_weight_d))%>%group_by(id)%>%mutate(weight=cumprod(weight0))%>%ungroup()
+workdata <- bind_rows(workdata0, workdata1)%>%left_join(baseline%>%select(id,trt.weight))%>%
+  mutate(weight = weight * trt.weight) %>%
+  select(id, followup_time, X1, X2, X3, X4, age, assigned.trt, Y, C, weight)
+
+```
+Now we are ready to do the analysis. We will use a weighted Cox model to estimate the treatment effect.
+
+```{r}
+analysis.data=workdata%>%filter(art_censored==0)%>% group_by(id)%>%filter(followup_time==max(followup_time))
+cox_model <- coxph(Surv(followup_time, Y) ~ assigned.trt, 
+                    data = analysis.data, 
+                    weights = weight)
+
+summary(cox_model)
+```
